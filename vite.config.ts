@@ -5,6 +5,9 @@ import { murekaProxy } from './server/murekaProxy'
 export default defineConfig({
   plugins: [react(), murekaProxy()],
   publicDir: 'demo',
+  preview: {
+    allowedHosts: true,
+  },
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
