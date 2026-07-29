@@ -4,6 +4,12 @@ import { describeAudio, normalizeMurekaAudioUrl } from './murekaClient'
 const convertAudioBlobToMp3 = vi.hoisted(() => vi.fn())
 vi.mock('../utils/audio', () => ({ convertAudioBlobToMp3 }))
 
+const promptSuggestions = [
+  { title: '暮色渐进', text: '保留克制旋律与温暖音色逐步加入鼓组和低频发展完整作品' },
+  { title: '朦胧回响', text: '围绕忧郁情绪扩展空间和声在中段形成动态高潮后安静回落' },
+  { title: '夜路律动', text: '延续原有节奏动机加入稳定贝斯与细腻鼓点构建夜行编曲' },
+]
+
 describe('Mureka describe client', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -14,13 +20,14 @@ describe('Mureka describe client', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       result: {
         title: '暮色缓缓沉落', instrument: ['电吉他'], toneColor: ['温暖'], genres: ['摇滚'], key: 'Am',
-        emotion: ['克制', '忧郁'], bpm: '78', description: '温暖朦胧的旋律在暮色中缓慢铺展开来',
+        emotion: ['克制', '忧郁'], bpm: '78', description: '温暖朦胧的旋律在暮色中缓慢铺展开来', promptSuggestions,
       },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await describeAudio(new Blob(['audio'], { type: 'audio/mpeg' }))
     expect(result.genres).toEqual(['摇滚'])
+    expect(result.promptSuggestions).toEqual(promptSuggestions)
     const request = fetchMock.mock.calls[0][1] as RequestInit
     expect(JSON.parse(String(request.body)).url).toMatch(/^data:audio\/mp3;base64,/)
   })
@@ -53,7 +60,7 @@ describe('Mureka describe client', () => {
     convertAudioBlobToMp3.mockResolvedValue(new Blob(['mp3-audio'], { type: 'audio/mp3' }))
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       title: '雨夜微光浮动', instrument: ['电吉他'], toneColor: ['朦胧'], genres: ['轻音乐'], key: '无',
-      emotion: ['安静', '克制'], bpm: '', description: '朦胧旋律在安静雨夜里缓慢流动并逐渐散开',
+      emotion: ['安静', '克制'], bpm: '', description: '朦胧旋律在安静雨夜里缓慢流动并逐渐散开', promptSuggestions,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 

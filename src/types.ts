@@ -11,6 +11,11 @@ export type AudioSource =
   | { type: 'asset'; url: string }
   | { type: 'blob'; blobId: string }
 
+export interface AIPromptSuggestion {
+  title: string
+  text: string
+}
+
 export interface AudioAIAnalysis {
   status: 'analyzing' | 'complete' | 'failed'
   title?: string
@@ -21,6 +26,8 @@ export interface AudioAIAnalysis {
   emotion?: string[]
   bpm?: string
   description?: string
+  promptSuggestions?: AIPromptSuggestion[]
+  analysisVersion?: number
   error?: string
   analyzedAt?: string
 }

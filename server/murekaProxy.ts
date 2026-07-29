@@ -1,10 +1,14 @@
-import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import type { Plugin } from 'vite'
 
 const MAX_REQUEST_BYTES = 15 * 1024 * 1024
 const PROVIDER_TIMEOUT_MS = 120_000
+const analysisCacheLoads = new Map<string, Promise<Record<string, CachedAnalysis>>>()
+const analysisCacheWrites = new Map<string, Promise<void>>()
+const analysisJobs = new Map<string, Promise<ReturnType<typeof normalizeSummary>>>()
 
 interface MurekaDescription {
   instrument?: string[]
@@ -23,6 +27,12 @@ interface DeepSeekSummary {
   emotion?: unknown
   bpm?: unknown
   description?: unknown
+  prompt_suggestions?: unknown
+}
+
+interface CachedAnalysis {
+  result: ReturnType<typeof normalizeSummary>
+  cachedAt: string
 }
 
 const SUMMARY_PROMPT = `梳理英文文本音乐信息，归类以下内容。只输出一个 JSON 对象，不要 Markdown、解释或额外文本。
@@ -37,6 +47,7 @@ JSON 字段与规则：
 6. bpm：字符串，只能是纯数字；无法判断时为空字符串。
 7. description：15-40 个汉字，描述这段音频。
 8. title：4-10 个汉字，纯中文，不得包含英文、数字、标点、括号或其他符号。
+9. prompt_suggestions：恰好 3 项的数组，每项包含 title 和 text。三条建议必须针对当前音频的情绪、音色、节奏与描述分别提出不同的完整作品延伸方向，不得使用通用套话。title 为 2-12 个中文字符，text 为 12-100 个中文字符，可直接作为音乐生成 Prompt。
 
 标题创作规则：
 - 不罗列 BPM、调式或乐器名，不机械拼接标签。
@@ -47,7 +58,7 @@ JSON 字段与规则：
 - 整体描述为空时，仅依靠情绪与音色创作；调式为空时完全忽略。
 
 严格输出示例：
-{"title":"暮色缓缓沉落","instrument":"电吉他","tone_color":["温暖","朦胧"],"genres":"摇滚","key":"Am","emotion":["克制","忧郁"],"bpm":"78","description":"温暖朦胧的旋律在暮色中缓慢铺展开来"}`
+{"title":"暮色缓缓沉落","instrument":"电吉他","tone_color":["温暖","朦胧"],"genres":"摇滚","key":"Am","emotion":["克制","忧郁"],"bpm":"78","description":"温暖朦胧的旋律在暮色中缓慢铺展开来","prompt_suggestions":[{"title":"暮色渐进","text":"保留克制旋律与温暖音色，逐步加入鼓组和低频，发展为层次完整的暮色摇滚作品"},{"title":"朦胧回响","text":"围绕忧郁情绪扩展空间感和声，在中段形成动态高潮，最后回落至安静余韵"},{"title":"夜路律动","text":"延续原有节奏动机，加入稳定贝斯与细腻鼓点，构建适合夜间行驶的完整编曲"}]}`
 
 function unquote(value: string) {
   return value.trim().replace(/^['"]|['"]$/g, '')
@@ -89,6 +100,14 @@ function stringList(value: unknown, limit: number) {
   return values.map(stringValue).filter(Boolean).slice(0, limit)
 }
 
+function promptSuggestionList(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 3).map((item) => {
+    const suggestion = item && typeof item === 'object' ? item as { title?: unknown; text?: unknown } : {}
+    return { title: stringValue(suggestion.title), text: stringValue(suggestion.text) }
+  }).filter((item) => item.title && item.text)
+}
+
 function parseDeepSeekContent(content: string): DeepSeekSummary {
   const cleaned = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   return JSON.parse(cleaned) as DeepSeekSummary
@@ -104,6 +123,7 @@ function normalizeSummary(raw: DeepSeekSummary) {
     emotion: stringList(raw.emotion, 4),
     bpm: stringValue(raw.bpm),
     description: stringValue(raw.description),
+    promptSuggestions: promptSuggestionList(raw.prompt_suggestions),
   }
 }
 
@@ -124,8 +144,53 @@ function validateSummary(summary: ReturnType<typeof normalizeSummary>) {
     && (!summary.bpm || /^\d+$/.test(summary.bpm))
     && descriptionLength >= 15 && descriptionLength <= 40
     && /^[\u3400-\u9fff\s，。！？、；：…—]+$/.test(summary.description)
+    && summary.promptSuggestions.length === 3
+    && summary.promptSuggestions.every((suggestion) => suggestion.title.length >= 2
+      && suggestion.title.length <= 12
+      && /^[\u3400-\u9fff]+$/.test(suggestion.title)
+      && suggestion.text.length >= 12
+      && suggestion.text.length <= 100
+      && /^[\u3400-\u9fff\s，。！？、；：…—]+$/.test(suggestion.text))
   if (!valid) throw new Error('DeepSeek 返回内容不符合音乐标签格式')
   return summary
+}
+
+function cacheFilePath(root: string) {
+  return path.join(root, '.cache', 'audio-analysis.json')
+}
+
+function audioCacheKey(audioUrl: string) {
+  return createHash('sha256').update(audioUrl).digest('hex')
+}
+
+function loadAnalysisCache(root: string) {
+  let load = analysisCacheLoads.get(root)
+  if (!load) {
+    load = readFile(cacheFilePath(root), 'utf8')
+      .then((content) => JSON.parse(content) as Record<string, CachedAnalysis>)
+      .catch(() => ({}))
+    analysisCacheLoads.set(root, load)
+  }
+  return load
+}
+
+async function cacheAnalysis(root: string, key: string, result: ReturnType<typeof normalizeSummary>) {
+  const previousWrite = analysisCacheWrites.get(root) ?? Promise.resolve()
+  const nextWrite = previousWrite.then(async () => {
+    const cache = await loadAnalysisCache(root)
+    cache[key] = { result, cachedAt: new Date().toISOString() }
+    const file = cacheFilePath(root)
+    const temporaryFile = `${file}.tmp`
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(temporaryFile, `${JSON.stringify(cache, null, 2)}\n`, 'utf8')
+    await rename(temporaryFile, file)
+  })
+  analysisCacheWrites.set(root, nextWrite)
+  try {
+    await nextWrite
+  } finally {
+    if (analysisCacheWrites.get(root) === nextWrite) analysisCacheWrites.delete(root)
+  }
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit) {
@@ -190,25 +255,36 @@ function createHandler(root: string) {
     }
 
     try {
-      const keys = await readApiKeys(root)
-      if (!keys.mureka) {
-        sendJson(response, 503, { error: '请先在 config.yaml 中配置 api_key' })
-        return
-      }
-      if (!keys.deepseek) {
-        sendJson(response, 503, { error: '请先在 config.yaml 中配置 deepseek_api_key' })
-        return
-      }
-
       const payload = JSON.parse(await readRequestBody(request)) as { url?: string }
       if (!payload.url?.startsWith('data:audio/')) {
         sendJson(response, 400, { error: '缺少有效的音频 Data URL' })
         return
       }
 
-      const murekaResult = await describeWithMureka(payload.url, keys.mureka)
-      const summary = await summarizeWithDeepSeek(murekaResult, keys.deepseek)
-      sendJson(response, 200, { result: summary })
+      const cacheKey = audioCacheKey(payload.url)
+      const cached = (await loadAnalysisCache(root))[cacheKey]
+      if (cached?.result.promptSuggestions?.length === 3) {
+        sendJson(response, 200, { result: cached.result, cached: true })
+        return
+      }
+
+      const jobKey = `${root}:${cacheKey}`
+      let job = analysisJobs.get(jobKey)
+      if (!job) {
+        job = (async () => {
+          const keys = await readApiKeys(root)
+          if (!keys.mureka) throw new Error('请先在 config.yaml 中配置 api_key')
+          if (!keys.deepseek) throw new Error('请先在 config.yaml 中配置 deepseek_api_key')
+          const murekaResult = await describeWithMureka(payload.url!, keys.mureka)
+          const summary = await summarizeWithDeepSeek(murekaResult, keys.deepseek)
+          // Only validated results enter the shared local cache, so malformed provider responses are never replayed.
+          await cacheAnalysis(root, cacheKey, summary)
+          return summary
+        })().finally(() => analysisJobs.delete(jobKey))
+        analysisJobs.set(jobKey, job)
+      }
+      const summary = await job
+      sendJson(response, 200, { result: summary, cached: false })
     } catch (error) {
       sendJson(response, 500, { error: error instanceof Error ? error.message : '音频分析请求失败' })
     }

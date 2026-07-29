@@ -27,11 +27,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><AudioLines size={22} /></span><span>JamCapture</span></div>
         <Navigation />
-        <div className="sidebar-note">
-          <span className="eyebrow">LOCAL WORKSPACE</span>
-          <p>灵感只保存在此设备</p>
-          <span className="privacy-dot">Private by default</span>
-        </div>
       </aside>
       <main className="main-content">{children}</main>
       <PlayerBar />

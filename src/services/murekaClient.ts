@@ -1,7 +1,8 @@
-import type { AudioAIAnalysis } from '../types'
+import type { AIPromptSuggestion, AudioAIAnalysis } from '../types'
 import { convertAudioBlobToMp3 } from '../utils/audio'
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024
+export const AI_ANALYSIS_VERSION = 2
 
 export interface MusicSummary {
   title: string
@@ -12,6 +13,7 @@ export interface MusicSummary {
   emotion: string[]
   bpm: string
   description: string
+  promptSuggestions: AIPromptSuggestion[]
 }
 
 function isChineseText(value: string) {
@@ -31,6 +33,13 @@ export function validateMusicSummary(result: MusicSummary) {
     && (!result.bpm || /^\d+$/.test(result.bpm))
     && descriptionLength >= 15 && descriptionLength <= 40
     && /^[\u3400-\u9fff\s，。！？、；：…—]+$/u.test(result.description)
+    && result.promptSuggestions.length === 3
+    && result.promptSuggestions.every((suggestion) => suggestion.title.trim().length >= 2
+      && suggestion.title.trim().length <= 12
+      && /^[\u3400-\u9fff]+$/u.test(suggestion.title.trim())
+      && suggestion.text.trim().length >= 12
+      && suggestion.text.trim().length <= 100
+      && /^[\u3400-\u9fff\s，。！？、；：…—]+$/u.test(suggestion.text.trim()))
   if (!valid) throw new Error('AI 返回内容不符合音乐标签格式，请点击重新分析')
   return result
 }
@@ -98,6 +107,7 @@ export async function describeAudio(blob: Blob): Promise<MusicSummary> {
     emotion?: string[]
     bpm?: string
     description?: string
+    promptSuggestions?: AIPromptSuggestion[]
   }
   if (!response.ok) throw new Error(errorMessage(payload.error, `AI 音频分析失败（${response.status}）`))
 
@@ -111,9 +121,10 @@ export async function describeAudio(blob: Blob): Promise<MusicSummary> {
     emotion: result.emotion ?? [],
     bpm: result.bpm ?? '',
     description: result.description ?? '',
+    promptSuggestions: result.promptSuggestions ?? [],
   })
 }
 
 export function completedAnalysis(result: MusicSummary): AudioAIAnalysis {
-  return { status: 'complete', ...result, analyzedAt: new Date().toISOString() }
+  return { status: 'complete', ...result, analysisVersion: AI_ANALYSIS_VERSION, analyzedAt: new Date().toISOString() }
 }

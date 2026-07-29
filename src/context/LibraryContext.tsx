@@ -3,7 +3,7 @@ import { fallbackWaveform } from '../data/demoTracks'
 import { repository } from '../services/repository'
 import type { GeneratedTrack, GenerationRequest, InspirationTrack } from '../types'
 import { AUDIO_WAVEFORM_VERSION, analyzeAudioBlob } from '../utils/audio'
-import { completedAnalysis, describeAudio } from '../services/murekaClient'
+import { AI_ANALYSIS_VERSION, completedAnalysis, describeAudio } from '../services/murekaClient'
 
 const waveformAnalysisJobs = new Map<string, Promise<InspirationTrack | null>>()
 const aiAnalysisJobs = new Map<string, Promise<InspirationTrack>>()
@@ -74,11 +74,18 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       ])
       if (active) {
         // Remove obsolete sample arrays immediately; each audio file is then decoded independently.
-        setInspirations(inspirationData.map((track) => ({
-          ...track,
-          waveform: track.waveformVersion === AUDIO_WAVEFORM_VERSION ? track.waveform : [],
-          aiAnalysis: track.aiAnalysis ?? { status: 'analyzing' },
-        })))
+        setInspirations(inspirationData.map((track) => {
+          const analysisIsCurrent = track.aiAnalysis?.status === 'complete'
+            && track.aiAnalysis.analysisVersion === AI_ANALYSIS_VERSION
+            && track.aiAnalysis.promptSuggestions?.length === 3
+          return {
+            ...track,
+            waveform: track.waveformVersion === AUDIO_WAVEFORM_VERSION ? track.waveform : [],
+            aiAnalysis: analysisIsCurrent || track.aiAnalysis?.status !== 'complete'
+              ? track.aiAnalysis ?? { status: 'analyzing' }
+              : { status: 'analyzing' },
+          }
+        }))
         setGenerated(generatedData)
         setLoading(false)
       }

@@ -1,4 +1,4 @@
-import { AlertCircle, Check, Edit3, Guitar, KeyboardMusic, LoaderCircle, Mic2, Pause, Play, RefreshCw, Sparkles } from 'lucide-react'
+import { AlertCircle, Edit3, Guitar, KeyboardMusic, LoaderCircle, Mic2, Pause, Play, RefreshCw, Sparkles } from 'lucide-react'
 import { usePlayer } from '../context/PlayerContext'
 import type { InspirationTrack } from '../types'
 import { cn, formatDate, formatDuration } from '../utils/format'
@@ -6,9 +6,6 @@ import { Waveform } from './Waveform'
 
 interface TrackCardProps {
   track: InspirationTrack
-  selectionMode: boolean
-  selected: boolean
-  onSelect: () => void
   onEdit: () => void
   onExtend: () => void
   onRetryAnalysis: () => void
@@ -20,7 +17,7 @@ function InstrumentIcon({ instrument }: { instrument: string }) {
   return <KeyboardMusic size={18} />
 }
 
-export function TrackCard({ track, selectionMode, selected, onSelect, onEdit, onExtend, onRetryAnalysis }: TrackCardProps) {
+export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis }: TrackCardProps) {
   const { current, playing, play } = usePlayer()
   const isPlaying = current?.id === track.id && playing
   const isAnalyzing = track.aiAnalysis?.status === 'analyzing'
@@ -37,12 +34,7 @@ export function TrackCard({ track, selectionMode, selected, onSelect, onEdit, on
   const hasAIContent = Boolean(aiTags?.length && track.aiAnalysis?.description?.trim())
   const showOriginalTags = !track.aiAnalysis
   return (
-    <article className={cn('track-card', selected && 'track-card-selected')}>
-      {selectionMode && (
-        <button className={cn('select-box', selected && 'select-box-active')} onClick={onSelect} aria-label={selected ? `取消选择 ${track.title}` : `选择 ${track.title}`}>
-          {selected && <Check size={14} strokeWidth={3} />}
-        </button>
-      )}
+    <article className="track-card">
       <div className="track-main">
         <div className="track-heading">
           <div className="instrument-glyph"><InstrumentIcon instrument={track.tags.instrument} /></div>

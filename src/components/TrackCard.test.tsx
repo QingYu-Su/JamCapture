@@ -17,8 +17,7 @@ const baseTrack: InspirationTrack = {
 }
 
 const actions = {
-  selectionMode: false, selected: false, onSelect: vi.fn(), onEdit: vi.fn(),
-  onExtend: vi.fn(), onRetryAnalysis: vi.fn(),
+  onEdit: vi.fn(), onExtend: vi.fn(), onRetryAnalysis: vi.fn(),
 }
 
 describe('TrackCard AI analysis states', () => {

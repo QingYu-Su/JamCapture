@@ -1,4 +1,4 @@
-import { ArrowUpRight, Disc3, Pause, Play, Sparkles, WandSparkles } from 'lucide-react'
+import { Disc3, Pause, Play, Sparkles, WandSparkles } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useLibrary } from '../context/LibraryContext'
 import { usePlayer } from '../context/PlayerContext'
@@ -36,11 +36,6 @@ export function ExtensionsPage() {
         <div><span className="eyebrow">CREATIVE WORKSPACE / 02</span><h1>灵感延伸</h1><p>让一个片段，长成一首完整的作品。</p></div>
         <div className="ai-status"><span><WandSparkles size={16} />AI ENGINE</span><strong>SIMULATION MODE</strong></div>
       </header>
-      <div className="extension-hero">
-        <div><Sparkles size={22} /><span>FROM FRAGMENT TO FORM</span></div>
-        <p>JamCapture 会保留原始演奏的呼吸、和声倾向与情绪重心，再为它构建新的段落。</p>
-        <ArrowUpRight size={21} />
-      </div>
       <div className="section-heading"><div><h2>生成作品</h2><span>{generated.length} DEMOS</span></div></div>
       <section className="generated-list">
         {loading ? <div className="loading-state"><span /><span /></div> : generated.length ? generated.map((track) => <GeneratedCard key={track.id} track={track} sourceNames={track.sourceTrackIds.map((id) => inspirations.find((item) => item.id === id)?.title).filter(Boolean) as string[]} />) : <div className="empty-state extension-empty"><Sparkles size={30} /><h3>还没有延伸作品</h3><p>从灵感库选择一段或多段录音，创建第一首 Demo。</p><Link to="/library">返回灵感库</Link></div>}
