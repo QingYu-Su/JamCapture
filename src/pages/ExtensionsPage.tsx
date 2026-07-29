@@ -31,7 +31,7 @@ function GeneratedCard({ track, sourceNames }: { track: GeneratedTrack; sourceNa
 export function ExtensionsPage() {
   const { generated, inspirations, loading } = useLibrary()
   return (
-    <div className="page">
+    <div className="page extensions-page">
       <header className="page-header extension-header">
         <div><span className="eyebrow">CREATIVE WORKSPACE / 02</span><h1>灵感延伸</h1><p>让一个片段，长成一首完整的作品。</p></div>
         <div className="ai-status"><span><WandSparkles size={16} />AI ENGINE</span><strong>SIMULATION MODE</strong></div>

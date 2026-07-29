@@ -80,8 +80,8 @@ export function LibraryPage() {
   }
 
   return (
-    <div className="page">
-      <header className="page-header">
+    <div className="page library-page">
+      <header className="page-header library-header">
         <div><span className="eyebrow">CREATIVE WORKSPACE / 01</span><h1>我的灵感库</h1><p>捕捉未经修饰的声音，在它消失之前。</p></div>
         <button className={selectionMode ? 'selection-toggle active' : 'selection-toggle'} onClick={() => selectionMode ? leaveSelection() : setSelectionMode(true)}>
           {selectionMode ? <CheckSquare2 size={17} /> : <SquareDashedMousePointer size={17} />}<span>{selectionMode ? '退出选择' : '多选模式'}</span>
