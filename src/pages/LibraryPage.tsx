@@ -4,6 +4,7 @@ import { EditTrackModal } from '../components/EditTrackModal'
 import { FilterBar } from '../components/FilterBar'
 import { GenerationModal } from '../components/GenerationModal'
 import { RecordingModal } from '../components/RecordingModal'
+import { ShareTrackModal } from '../components/ShareTrackModal'
 import { TrackCard } from '../components/TrackCard'
 import { useLibrary } from '../context/LibraryContext'
 import { usePlayer } from '../context/PlayerContext'
@@ -14,7 +15,7 @@ import { filterTracks } from '../utils/tracks'
 const initialFilters: TrackFilters = { query: '', instrument: 'all', style: 'all', date: 'all' }
 
 export function LibraryPage() {
-  const { inspirations, loading, saveInspiration, updateInspiration, deleteInspiration, analyzeInspiration } = useLibrary()
+  const { inspirations, loading, saveInspiration, updateInspiration, deleteInspiration, analyzeInspiration, getBlob } = useLibrary()
   const { stopIfTrack } = usePlayer()
   const [filters, setFilters] = useState(initialFilters)
   const [recordingOpen, setRecordingOpen] = useState(false)
@@ -23,6 +24,7 @@ export function LibraryPage() {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const [editingTrack, setEditingTrack] = useState<InspirationTrack | null>(null)
   const [generationTracks, setGenerationTracks] = useState<InspirationTrack[]>([])
+  const [sharingTrack, setSharingTrack] = useState<InspirationTrack | null>(null)
   const visibleTracks = useMemo(() => filterTracks(inspirations, filters), [filters, inspirations])
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export function LibraryPage() {
       <div className="section-heading"><div><h2>最近捕捉</h2><span>{visibleTracks.length} / {inspirations.length} CAPTURES</span></div></div>
       <section className="track-list" aria-live="polite">
         {loading ? <div className="loading-state"><span /><span /><span /></div> : visibleTracks.length ? visibleTracks.map((track) => (
-          <TrackCard key={track.id} track={track} onEdit={() => setEditingTrack(track)} onExtend={() => setGenerationTracks([track])} onRetryAnalysis={() => void analyzeInspiration(track)} />
+          <TrackCard key={track.id} track={track} onEdit={() => setEditingTrack(track)} onExtend={() => setGenerationTracks([track])} onRetryAnalysis={() => void analyzeInspiration(track, { forceRefresh: true })} onShare={() => setSharingTrack(track)} />
         )) : <div className="empty-state"><Mic size={30} /><h3>这里还没有匹配的灵感</h3><p>调整筛选条件，或录下此刻脑海中的声音。</p><button onClick={() => setFilters(initialFilters)}>清除筛选</button></div>}
       </section>
       <div className="capture-fabs">
@@ -105,6 +107,7 @@ export function LibraryPage() {
       <RecordingModal open={recordingOpen} onClose={() => setRecordingOpen(false)} onSave={saveInspiration} />
       <EditTrackModal track={editingTrack} onClose={() => setEditingTrack(null)} onSave={async (track) => { await updateInspiration(track); setEditingTrack(null) }} onDelete={async (track) => { stopIfTrack(track.id); await deleteInspiration(track); setEditingTrack(null) }} />
       <GenerationModal open={generationTracks.length > 0} tracks={generationTracks} onClose={() => setGenerationTracks([])} />
+      <ShareTrackModal track={sharingTrack} getBlob={getBlob} onClose={() => setSharingTrack(null)} />
     </div>
   )
 }

@@ -17,14 +17,15 @@ const baseTrack: InspirationTrack = {
 }
 
 const actions = {
-  onEdit: vi.fn(), onExtend: vi.fn(), onRetryAnalysis: vi.fn(),
+  onEdit: vi.fn(), onExtend: vi.fn(), onRetryAnalysis: vi.fn(), onShare: vi.fn(),
 }
 
 describe('TrackCard AI analysis states', () => {
   it('shows a loading panel while analysis is pending', () => {
     render(<TrackCard {...actions} track={{ ...baseTrack, aiAnalysis: { status: 'analyzing' } }} />)
     expect(screen.getByText('AI 正在理解这段音频')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'AI Test 正在分析' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '更多操作 AI Test' }))
+    expect(screen.getByRole('menuitem', { name: '分析中' })).toBeDisabled()
     expect(screen.queryByText('Rock')).not.toBeInTheDocument()
     expect(screen.queryByText('Raw')).not.toBeInTheDocument()
   })
@@ -32,8 +33,22 @@ describe('TrackCard AI analysis states', () => {
   it('allows every completed item to request analysis again', () => {
     const onRetryAnalysis = vi.fn()
     render(<TrackCard {...actions} onRetryAnalysis={onRetryAnalysis} track={baseTrack} />)
-    fireEvent.click(screen.getByRole('button', { name: '重新分析 AI Test' }))
+    fireEvent.click(screen.getByRole('button', { name: '更多操作 AI Test' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'AI分析' }))
     expect(onRetryAnalysis).toHaveBeenCalledOnce()
+  })
+
+  it('keeps edit and share actions inside the more menu', () => {
+    const onEdit = vi.fn()
+    const onShare = vi.fn()
+    render(<TrackCard {...actions} onEdit={onEdit} onShare={onShare} track={baseTrack} />)
+    expect(screen.queryByRole('menuitem', { name: '编辑灵感' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '更多操作 AI Test' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '编辑灵感' }))
+    expect(onEdit).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: '更多操作 AI Test' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '分享' }))
+    expect(onShare).toHaveBeenCalledOnce()
   })
 
   it('keeps tags and description hidden after an analysis error', () => {

@@ -86,7 +86,7 @@ function blobTypeFromDataUrl(header: string) {
   return header.match(/^data:([^;]+)/)?.[1] ?? 'unknown'
 }
 
-export async function describeAudio(blob: Blob): Promise<MusicSummary> {
+export async function describeAudio(blob: Blob, options: { forceRefresh?: boolean } = {}): Promise<MusicSummary> {
   const compatibleBlob = /audio\/webm/i.test(blob.type) ? await convertAudioBlobToMp3(blob) : blob
   if (compatibleBlob.size > MAX_AUDIO_BYTES) throw new Error('转换后的音频超过 Mureka 允许的 10MB 上限')
   const dataUrl = normalizeMurekaAudioUrl(await blobToDataUrl(compatibleBlob))
@@ -94,7 +94,7 @@ export async function describeAudio(blob: Blob): Promise<MusicSummary> {
   const response = await fetch('/api/song/describe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: dataUrl }),
+    body: JSON.stringify({ url: dataUrl, forceRefresh: Boolean(options.forceRefresh) }),
   })
   const payload = await response.json().catch(() => ({})) as {
     error?: unknown

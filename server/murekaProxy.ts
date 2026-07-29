@@ -1,10 +1,11 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import type { Plugin } from 'vite'
 
 const MAX_REQUEST_BYTES = 15 * 1024 * 1024
+const MAX_SHARE_AUDIO_BYTES = 55 * 1024 * 1024
 const PROVIDER_TIMEOUT_MS = 120_000
 const analysisCacheLoads = new Map<string, Promise<Record<string, CachedAnalysis>>>()
 const analysisCacheWrites = new Map<string, Promise<void>>()
@@ -33,6 +34,16 @@ interface DeepSeekSummary {
 interface CachedAnalysis {
   result: ReturnType<typeof normalizeSummary>
   cachedAt: string
+}
+
+interface SharedTrackMetadata {
+  title: string
+  duration: number
+  waveform: number[]
+  tags: { style: string; instrument: string; mood: string; bpm: string }
+  description?: string
+  audioMimeType: string
+  createdAt: string
 }
 
 const SUMMARY_PROMPT = `梳理英文文本音乐信息，归类以下内容。只输出一个 JSON 对象，不要 Markdown、解释或额外文本。
@@ -73,16 +84,20 @@ async function readApiKeys(root: string) {
   }
 }
 
-async function readRequestBody(request: IncomingMessage) {
+async function readRequestBuffer(request: IncomingMessage, maximumBytes = MAX_REQUEST_BYTES) {
   const chunks: Buffer[] = []
   let size = 0
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += buffer.length
-    if (size > MAX_REQUEST_BYTES) throw new Error('请求音频超过允许大小')
+    if (size > maximumBytes) throw new Error('请求内容超过允许大小')
     chunks.push(buffer)
   }
-  return Buffer.concat(chunks).toString('utf8')
+  return Buffer.concat(chunks)
+}
+
+async function readRequestBody(request: IncomingMessage) {
+  return (await readRequestBuffer(request)).toString('utf8')
 }
 
 function sendJson(response: ServerResponse, status: number, payload: unknown) {
@@ -193,6 +208,26 @@ async function cacheAnalysis(root: string, key: string, result: ReturnType<typeo
   }
 }
 
+async function invalidateCachedAnalysis(root: string, key: string) {
+  const previousWrite = analysisCacheWrites.get(root) ?? Promise.resolve()
+  const nextWrite = previousWrite.then(async () => {
+    const cache = await loadAnalysisCache(root)
+    if (!(key in cache)) return
+    delete cache[key]
+    const file = cacheFilePath(root)
+    const temporaryFile = `${file}.tmp`
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(temporaryFile, `${JSON.stringify(cache, null, 2)}\n`, 'utf8')
+    await rename(temporaryFile, file)
+  })
+  analysisCacheWrites.set(root, nextWrite)
+  try {
+    await nextWrite
+  } finally {
+    if (analysisCacheWrites.get(root) === nextWrite) analysisCacheWrites.delete(root)
+  }
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS)
@@ -255,13 +290,14 @@ function createHandler(root: string) {
     }
 
     try {
-      const payload = JSON.parse(await readRequestBody(request)) as { url?: string }
+      const payload = JSON.parse(await readRequestBody(request)) as { url?: string; forceRefresh?: boolean }
       if (!payload.url?.startsWith('data:audio/')) {
         sendJson(response, 400, { error: '缺少有效的音频 Data URL' })
         return
       }
 
       const cacheKey = audioCacheKey(payload.url)
+      if (payload.forceRefresh) await invalidateCachedAnalysis(root, cacheKey)
       const cached = (await loadAnalysisCache(root))[cacheKey]
       if (cached?.result.promptSuggestions?.length === 3) {
         sendJson(response, 200, { result: cached.result, cached: true })
@@ -291,6 +327,71 @@ function createHandler(root: string) {
   }
 }
 
+function shareDirectory(root: string) {
+  return path.join(root, '.cache', 'shares')
+}
+
+function shareToken(request: IncomingMessage) {
+  const parts = (request.url ?? '').split('?')[0].split('/').filter(Boolean)
+  const token = parts[0] ?? ''
+  if (!/^[a-f0-9]{32}$/.test(token)) throw new Error('分享链接无效')
+  return { token, audio: parts[1] === 'audio' }
+}
+
+function createShareHandler(root: string) {
+  return async (request: IncomingMessage, response: ServerResponse) => {
+    try {
+      if (request.method === 'POST') {
+        const encodedMetadata = request.headers['x-jamcapture-metadata']
+        if (typeof encodedMetadata !== 'string') return sendJson(response, 400, { error: '缺少分享元数据' })
+        const raw = JSON.parse(Buffer.from(encodedMetadata, 'base64url').toString('utf8')) as Omit<SharedTrackMetadata, 'audioMimeType' | 'createdAt'>
+        if (!raw.title?.trim() || !Number.isFinite(raw.duration) || !Array.isArray(raw.waveform)) {
+          return sendJson(response, 400, { error: '分享元数据格式无效' })
+        }
+        const audio = await readRequestBuffer(request, MAX_SHARE_AUDIO_BYTES)
+        if (!audio.length) return sendJson(response, 400, { error: '缺少分享音频' })
+        const token = randomUUID().replace(/-/g, '')
+        const directory = shareDirectory(root)
+        const metadata: SharedTrackMetadata = {
+          ...raw,
+          title: raw.title.trim().slice(0, 120),
+          audioMimeType: String(request.headers['content-type'] || 'audio/mpeg').split(';')[0],
+          createdAt: new Date().toISOString(),
+        }
+        await mkdir(directory, { recursive: true })
+        await Promise.all([
+          writeFile(path.join(directory, `${token}.audio`), audio),
+          writeFile(path.join(directory, `${token}.json`), JSON.stringify(metadata), 'utf8'),
+        ])
+        return sendJson(response, 201, { token, path: `/share/${token}` })
+      }
+
+      if (request.method !== 'GET' && request.method !== 'HEAD') return sendJson(response, 405, { error: 'Method not allowed' })
+      const target = shareToken(request)
+      const directory = shareDirectory(root)
+      const metadata = JSON.parse(await readFile(path.join(directory, `${target.token}.json`), 'utf8')) as SharedTrackMetadata
+      if (!target.audio) return sendJson(response, 200, { ...metadata, audioUrl: `/api/shares/${target.token}/audio` })
+
+      const audio = await readFile(path.join(directory, `${target.token}.audio`))
+      const range = request.headers.range?.match(/^bytes=(\d*)-(\d*)$/)
+      const start = range?.[1] ? Math.min(Number(range[1]), audio.length - 1) : 0
+      const end = range?.[2] ? Math.min(Number(range[2]), audio.length - 1) : audio.length - 1
+      const body = audio.subarray(start, end + 1)
+      response.statusCode = range ? 206 : 200
+      response.setHeader('Content-Type', metadata.audioMimeType)
+      response.setHeader('Accept-Ranges', 'bytes')
+      response.setHeader('Content-Length', body.length)
+      response.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      if (range) response.setHeader('Content-Range', `bytes ${start}-${end}/${audio.length}`)
+      if (request.method === 'HEAD') return response.end()
+      return response.end(body)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '分享请求失败'
+      sendJson(response, message.includes('ENOENT') ? 404 : 500, { error: message.includes('ENOENT') ? '分享内容不存在或已失效' : message })
+    }
+  }
+}
+
 export function murekaProxy(): Plugin {
   let projectRoot = process.cwd()
   const registerMiddleware = (server: { middlewares: { use: (...args: unknown[]) => void } }) => {
@@ -303,6 +404,7 @@ export function murekaProxy(): Plugin {
       next()
     })
     server.middlewares.use('/api/song/describe', createHandler(projectRoot))
+    server.middlewares.use('/api/shares', createShareHandler(projectRoot))
   }
   return {
     name: 'jamcapture-mureka-deepseek-proxy',

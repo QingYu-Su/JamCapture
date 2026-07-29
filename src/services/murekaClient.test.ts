@@ -29,7 +29,21 @@ describe('Mureka describe client', () => {
     expect(result.genres).toEqual(['摇滚'])
     expect(result.promptSuggestions).toEqual(promptSuggestions)
     const request = fetchMock.mock.calls[0][1] as RequestInit
-    expect(JSON.parse(String(request.body)).url).toMatch(/^data:audio\/mp3;base64,/)
+    const requestBody = JSON.parse(String(request.body)) as { url: string; forceRefresh: boolean }
+    expect(requestBody.url).toMatch(/^data:audio\/mp3;base64,/)
+    expect(requestBody.forceRefresh).toBe(false)
+  })
+
+  it('marks a manual AI analysis request to invalidate the server cache', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      title: '暮色缓缓沉落', instrument: ['电吉他'], toneColor: ['温暖'], genres: ['摇滚'], key: 'Am',
+      emotion: ['克制', '忧郁'], bpm: '78', description: '温暖朦胧的旋律在暮色中缓慢铺展开来', promptSuggestions,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await describeAudio(new Blob(['audio'], { type: 'audio/mpeg' }), { forceRefresh: true })
+    const request = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(String(request.body)).forceRefresh).toBe(true)
   })
 
   it('surfaces configuration errors returned by the local proxy', async () => {

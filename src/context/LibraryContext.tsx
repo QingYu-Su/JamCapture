@@ -53,7 +53,7 @@ interface LibraryContextValue {
   updateInspiration: (track: InspirationTrack) => Promise<void>
   deleteInspiration: (track: InspirationTrack) => Promise<void>
   generateDemo: (request: GenerationRequest) => Promise<GeneratedTrack>
-  analyzeInspiration: (track: InspirationTrack) => Promise<void>
+  analyzeInspiration: (track: InspirationTrack, options?: { forceRefresh?: boolean }) => Promise<void>
   getBlob: (id: string) => Promise<Blob | undefined>
 }
 
@@ -64,6 +64,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [generated, setGenerated] = useState<GeneratedTrack[]>([])
   const [loading, setLoading] = useState(true)
   const automaticallyStarted = useRef(new Set<string>())
+  const automaticAnalysisQueue = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => {
     let active = true
@@ -121,7 +122,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     setInspirations((items) => items.filter((item) => item.id !== track.id))
   }, [])
 
-  const analyzeInspiration = useCallback(async (track: InspirationTrack) => {
+  const analyzeInspiration = useCallback(async (track: InspirationTrack, options: { forceRefresh?: boolean } = {}) => {
     const analyzingTrack: InspirationTrack = { ...track, aiAnalysis: { status: 'analyzing' } }
     setInspirations((items) => items.map((item) => item.id === track.id ? analyzingTrack : item))
     await repository.saveInspiration(analyzingTrack)
@@ -132,7 +133,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         const blob = await getTrackBlob(track)
         if (!blob) throw new Error('找不到需要分析的音频文件')
         // Mureka requests are serialized to avoid rate-limit failures when several legacy items resume together.
-        const result = await enqueueAIRequest(() => describeAudio(blob))
+        const result = await enqueueAIRequest(() => describeAudio(blob, options))
         const latestTrack = await repository.getInspiration(track.id) ?? track
         const completedTrack: InspirationTrack = {
           ...latestTrack,
@@ -177,7 +178,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         ))
       if (!shouldStart || automaticallyStarted.current.has(track.id)) continue
       automaticallyStarted.current.add(track.id)
-      void analyzeInspiration(track)
+      // Initial and newly imported tracks enter one promise chain, so only one complete analysis runs at a time.
+      automaticAnalysisQueue.current = automaticAnalysisQueue.current.then(
+        () => analyzeInspiration(track),
+        () => analyzeInspiration(track),
+      )
     }
   }, [analyzeInspiration, inspirations])
 

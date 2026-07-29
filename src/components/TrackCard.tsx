@@ -1,4 +1,5 @@
-import { AlertCircle, Edit3, Guitar, KeyboardMusic, LoaderCircle, Mic2, Pause, Play, RefreshCw, Sparkles } from 'lucide-react'
+import { AlertCircle, Edit3, LoaderCircle, Pause, Play, RefreshCw, Share2, Sparkles } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { usePlayer } from '../context/PlayerContext'
 import type { InspirationTrack } from '../types'
 import { cn, formatDate, formatDuration } from '../utils/format'
@@ -9,16 +10,13 @@ interface TrackCardProps {
   onEdit: () => void
   onExtend: () => void
   onRetryAnalysis: () => void
+  onShare: () => void
 }
 
-function InstrumentIcon({ instrument }: { instrument: string }) {
-  if (instrument.toLowerCase().includes('guitar')) return <Guitar size={18} />
-  if (instrument.toLowerCase().includes('vocal')) return <Mic2 size={18} />
-  return <KeyboardMusic size={18} />
-}
-
-export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis }: TrackCardProps) {
+export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis, onShare }: TrackCardProps) {
   const { current, playing, play } = usePlayer()
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const isPlaying = current?.id === track.id && playing
   const isAnalyzing = track.aiAnalysis?.status === 'analyzing'
   const aiTags = track.aiAnalysis?.status === 'complete'
@@ -33,11 +31,35 @@ export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis }: TrackCar
     : null
   const hasAIContent = Boolean(aiTags?.length && track.aiAnalysis?.description?.trim())
   const showOriginalTags = !track.aiAnalysis
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePress)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [menuOpen])
+
+  function runMenuAction(action: () => void) {
+    setMenuOpen(false)
+    action()
+  }
+
   return (
-    <article className="track-card">
+    <article className={cn('track-card', menuOpen && 'track-menu-open')}>
       <div className="track-main">
         <div className="track-heading">
-          <div className="instrument-glyph"><InstrumentIcon instrument={track.tags.instrument} /></div>
+          <button className={cn('round-action', 'title-play', isPlaying && 'round-action-active')} onClick={() => void play(track)} aria-label={isPlaying ? `暂停 ${track.title}` : `播放 ${track.title}`}>
+            {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+          </button>
           <div><h3>{track.title}</h3><span className="track-index">CAPTURE / {track.id.slice(-4).toUpperCase()}</span></div>
         </div>
         <Waveform data={track.waveform} active={isPlaying} className="track-wave" />
@@ -58,36 +80,24 @@ export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis }: TrackCar
             <i />
           </div>
         )}
-        {track.aiAnalysis?.status === 'complete' && hasAIContent && (
-          <div className="ai-insight">
-            <div className="ai-insight-title"><Sparkles size={13} /><span>AI AUDIO INSIGHT</span></div>
-            <p>{track.aiAnalysis.description || '分析已完成，暂未返回描述。'}</p>
-          </div>
-        )}
+        {track.aiAnalysis?.status === 'complete' && hasAIContent && <p className="ai-description">{track.aiAnalysis.description}</p>}
         {track.aiAnalysis?.status === 'failed' && (
-          <div className="ai-analysis-failed">
-            <AlertCircle size={14} />
-            <span>{track.aiAnalysis.error}</span>
-            <button onClick={onRetryAnalysis}><RefreshCw size={13} />重试分析</button>
-          </div>
+          <div className="ai-analysis-failed"><AlertCircle size={14} /><span>{track.aiAnalysis.error}</span></div>
         )}
         <div className="track-meta"><span>{formatDate(track.recordedAt)}</span><i /><span>{formatDuration(track.duration)}</span></div>
       </div>
       <div className="track-actions">
-        <button className={cn('round-action', isPlaying && 'round-action-active')} onClick={() => void play(track)} aria-label={isPlaying ? '暂停' : '播放'}>
-          {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-        </button>
-        <button
-          className="text-action"
-          onClick={onRetryAnalysis}
-          disabled={isAnalyzing}
-          aria-label={isAnalyzing ? `${track.title} 正在分析` : `重新分析 ${track.title}`}
-        >
-          {isAnalyzing ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
-          <span>{isAnalyzing ? '分析中' : '重新分析'}</span>
-        </button>
-        <button className="text-action" onClick={onEdit}><Edit3 size={16} /><span>编辑</span></button>
         <button className="extend-action" onClick={onExtend}><Sparkles size={16} /><span>灵感延伸</span></button>
+        <div className="track-menu-wrap" ref={menuRef}>
+          <button className="more-action" onClick={() => setMenuOpen((open) => !open)} aria-label={`更多操作 ${track.title}`} aria-haspopup="menu" aria-expanded={menuOpen}><span aria-hidden="true">•••</span></button>
+          {menuOpen && (
+            <div className="track-menu" role="menu">
+              <button role="menuitem" disabled={isAnalyzing} onClick={() => runMenuAction(onRetryAnalysis)}>{isAnalyzing ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />}<span>{isAnalyzing ? '分析中' : 'AI分析'}</span></button>
+              <button role="menuitem" onClick={() => runMenuAction(onEdit)}><Edit3 size={15} /><span>编辑灵感</span></button>
+              <button role="menuitem" onClick={() => runMenuAction(onShare)}><Share2 size={15} /><span>分享</span></button>
+            </div>
+          )}
+        </div>
       </div>
     </article>
   )
