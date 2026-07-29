@@ -95,18 +95,37 @@ function parseDeepSeekContent(content: string): DeepSeekSummary {
 }
 
 function normalizeSummary(raw: DeepSeekSummary) {
-  const title = stringValue(raw.title).replace(/[^\u3400-\u9fff]/g, '').slice(0, 10)
-  const bpm = stringValue(raw.bpm).match(/\d+/)?.[0] ?? ''
   return {
-    title: title.length >= 4 ? title : '',
+    title: stringValue(raw.title),
     instrument: stringList(raw.instrument, 1),
     toneColor: stringList(raw.tone_color, 3),
     genres: stringList(raw.genres, 1).length ? stringList(raw.genres, 1) : ['轻音乐'],
     key: stringValue(raw.key) || '无',
     emotion: stringList(raw.emotion, 4),
-    bpm,
-    description: stringValue(raw.description).slice(0, 40),
+    bpm: stringValue(raw.bpm),
+    description: stringValue(raw.description),
   }
+}
+
+function isChineseText(value: string) {
+  return /^[\u3400-\u9fff\s·]+$/.test(value)
+}
+
+function validateSummary(summary: ReturnType<typeof normalizeSummary>) {
+  const titleLength = summary.title.length
+  const descriptionLength = summary.description.trim().length
+  const valid = titleLength >= 4 && titleLength <= 10
+    && /^[\u3400-\u9fff]+$/.test(summary.title)
+    && summary.instrument.length === 1 && isChineseText(summary.instrument[0])
+    && summary.toneColor.length >= 1 && summary.toneColor.length <= 3 && summary.toneColor.every(isChineseText)
+    && summary.genres.length === 1 && isChineseText(summary.genres[0])
+    && /^(无|[A-G](?:#|b)?m?)$/.test(summary.key)
+    && summary.emotion.length >= 2 && summary.emotion.length <= 4 && summary.emotion.every(isChineseText)
+    && (!summary.bpm || /^\d+$/.test(summary.bpm))
+    && descriptionLength >= 15 && descriptionLength <= 40
+    && /^[\u3400-\u9fff\s，。！？、；：…—]+$/.test(summary.description)
+  if (!valid) throw new Error('DeepSeek 返回内容不符合音乐标签格式')
+  return summary
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit) {
@@ -160,7 +179,7 @@ async function summarizeWithDeepSeek(mureka: MurekaDescription, apiKey: string) 
   if (!upstream.ok) throw new Error(payload.error?.message || `DeepSeek 请求失败（${upstream.status}）`)
   const content = payload.choices?.[0]?.message?.content
   if (!content) throw new Error('DeepSeek 未返回可用的整理结果')
-  return normalizeSummary(parseDeepSeekContent(content))
+  return validateSummary(normalizeSummary(parseDeepSeekContent(content)))
 }
 
 function createHandler(root: string) {

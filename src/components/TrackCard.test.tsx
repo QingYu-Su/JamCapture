@@ -26,6 +26,8 @@ describe('TrackCard AI analysis states', () => {
     render(<TrackCard {...actions} track={{ ...baseTrack, aiAnalysis: { status: 'analyzing' } }} />)
     expect(screen.getByText('AI 正在理解这段音频')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'AI Test 正在分析' })).toBeDisabled()
+    expect(screen.queryByText('Rock')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw')).not.toBeInTheDocument()
   })
 
   it('allows every completed item to request analysis again', () => {
@@ -33,6 +35,14 @@ describe('TrackCard AI analysis states', () => {
     render(<TrackCard {...actions} onRetryAnalysis={onRetryAnalysis} track={baseTrack} />)
     fireEvent.click(screen.getByRole('button', { name: '重新分析 AI Test' }))
     expect(onRetryAnalysis).toHaveBeenCalledOnce()
+  })
+
+  it('keeps tags and description hidden after an analysis error', () => {
+    render(<TrackCard {...actions} track={{ ...baseTrack, aiAnalysis: { status: 'failed', error: '请求失败' } }} />)
+    expect(screen.getByText('请求失败')).toBeInTheDocument()
+    expect(screen.queryByText('Rock')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw')).not.toBeInTheDocument()
+    expect(screen.queryByText('AI AUDIO INSIGHT')).not.toBeInTheDocument()
   })
 
   it('renders the returned description and tags', () => {

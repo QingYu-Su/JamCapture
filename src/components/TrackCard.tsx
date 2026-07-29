@@ -34,6 +34,8 @@ export function TrackCard({ track, selectionMode, selected, onSelect, onEdit, on
         ...(track.aiAnalysis.bpm ? [{ label: `${track.aiAnalysis.bpm} BPM`, className: 'tag-bpm' }] : []),
       ]
     : null
+  const hasAIContent = Boolean(aiTags?.length && track.aiAnalysis?.description?.trim())
+  const showOriginalTags = !track.aiAnalysis
   return (
     <article className={cn('track-card', selected && 'track-card-selected')}>
       {selectionMode && (
@@ -47,8 +49,8 @@ export function TrackCard({ track, selectionMode, selected, onSelect, onEdit, on
           <div><h3>{track.title}</h3><span className="track-index">CAPTURE / {track.id.slice(-4).toUpperCase()}</span></div>
         </div>
         <Waveform data={track.waveform} active={isPlaying} className="track-wave" />
-        <div className="tag-row">
-          {aiTags?.length ? aiTags.map((tag, index) => (
+        {(hasAIContent || showOriginalTags) && <div className="tag-row">
+          {hasAIContent ? aiTags?.map((tag, index) => (
             <span key={`${tag.className}-${tag.label}-${index}`} className={`tag ${tag.className}`}>{tag.label}</span>
           )) : <>
             <span className="tag tag-style">{track.tags.style}</span>
@@ -56,7 +58,7 @@ export function TrackCard({ track, selectionMode, selected, onSelect, onEdit, on
             <span className="tag tag-mood">{track.tags.mood}</span>
             <span className="tag tag-bpm">{track.tags.bpm}</span>
           </>}
-        </div>
+        </div>}
         {track.aiAnalysis?.status === 'analyzing' && (
           <div className="ai-analysis-loading">
             <LoaderCircle className="spin" size={15} />
@@ -64,7 +66,7 @@ export function TrackCard({ track, selectionMode, selected, onSelect, onEdit, on
             <i />
           </div>
         )}
-        {track.aiAnalysis?.status === 'complete' && (
+        {track.aiAnalysis?.status === 'complete' && hasAIContent && (
           <div className="ai-insight">
             <div className="ai-insight-title"><Sparkles size={13} /><span>AI AUDIO INSIGHT</span></div>
             <p>{track.aiAnalysis.description || '分析已完成，暂未返回描述。'}</p>

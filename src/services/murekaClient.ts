@@ -14,6 +14,27 @@ export interface MusicSummary {
   description: string
 }
 
+function isChineseText(value: string) {
+  return /^[\u3400-\u9fff\s·]+$/u.test(value)
+}
+
+export function validateMusicSummary(result: MusicSummary) {
+  const descriptionLength = [...result.description.trim()].length
+  const titleLength = [...result.title].length
+  const valid = titleLength >= 4 && titleLength <= 10
+    && /^[\u3400-\u9fff]+$/u.test(result.title)
+    && result.instrument.length === 1 && isChineseText(result.instrument[0])
+    && result.toneColor.length >= 1 && result.toneColor.length <= 3 && result.toneColor.every(isChineseText)
+    && result.genres.length === 1 && isChineseText(result.genres[0])
+    && /^(无|[A-G](?:#|b)?m?)$/.test(result.key)
+    && result.emotion.length >= 2 && result.emotion.length <= 4 && result.emotion.every(isChineseText)
+    && (!result.bpm || /^\d+$/.test(result.bpm))
+    && descriptionLength >= 15 && descriptionLength <= 40
+    && /^[\u3400-\u9fff\s，。！？、；：…—]+$/u.test(result.description)
+  if (!valid) throw new Error('AI 返回内容不符合音乐标签格式，请点击重新分析')
+  return result
+}
+
 function errorMessage(error: unknown, fallback: string) {
   if (typeof error === 'string') return error
   if (error && typeof error === 'object') {
@@ -81,7 +102,7 @@ export async function describeAudio(blob: Blob): Promise<MusicSummary> {
   if (!response.ok) throw new Error(errorMessage(payload.error, `AI 音频分析失败（${response.status}）`))
 
   const result = payload.result ?? payload
-  return {
+  return validateMusicSummary({
     title: result.title ?? '',
     instrument: result.instrument ?? [],
     toneColor: result.toneColor ?? [],
@@ -90,7 +111,7 @@ export async function describeAudio(blob: Blob): Promise<MusicSummary> {
     emotion: result.emotion ?? [],
     bpm: result.bpm ?? '',
     description: result.description ?? '',
-  }
+  })
 }
 
 export function completedAnalysis(result: MusicSummary): AudioAIAnalysis {

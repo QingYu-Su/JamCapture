@@ -2,10 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { fallbackWaveform } from '../data/demoTracks'
 import { repository } from '../services/repository'
 import type { GeneratedTrack, GenerationRequest, InspirationTrack } from '../types'
-import { analyzeAudioBlob } from '../utils/audio'
+import { AUDIO_WAVEFORM_VERSION, analyzeAudioBlob } from '../utils/audio'
 import { completedAnalysis, describeAudio } from '../services/murekaClient'
 
-const WAVEFORM_VERSION = 2
 const waveformAnalysisJobs = new Map<string, Promise<InspirationTrack | null>>()
 const aiAnalysisJobs = new Map<string, Promise<InspirationTrack>>()
 let aiRequestQueue: Promise<unknown> = Promise.resolve()
@@ -35,7 +34,7 @@ function analyzeTrack(track: InspirationTrack) {
     const analyzedTrack = {
       ...latestTrack,
       waveform: analysis.waveform,
-      waveformVersion: WAVEFORM_VERSION,
+      waveformVersion: AUDIO_WAVEFORM_VERSION,
       duration: analysis.duration,
     }
     await repository.saveInspiration(analyzedTrack)
@@ -77,14 +76,14 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         // Remove obsolete sample arrays immediately; each audio file is then decoded independently.
         setInspirations(inspirationData.map((track) => ({
           ...track,
-          waveform: track.waveformVersion === WAVEFORM_VERSION ? track.waveform : [],
+          waveform: track.waveformVersion === AUDIO_WAVEFORM_VERSION ? track.waveform : [],
           aiAnalysis: track.aiAnalysis ?? { status: 'analyzing' },
         })))
         setGenerated(generatedData)
         setLoading(false)
       }
 
-      for (const track of inspirationData.filter((item) => item.waveformVersion !== WAVEFORM_VERSION)) {
+      for (const track of inspirationData.filter((item) => item.waveformVersion !== AUDIO_WAVEFORM_VERSION)) {
         try {
           const analyzedTrack = await analyzeTrack(track)
           if (active && analyzedTrack) {

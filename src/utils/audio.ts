@@ -1,3 +1,5 @@
+export const AUDIO_WAVEFORM_VERSION = 2
+
 export async function resolveAudioUrl(source: { type: 'asset'; url: string } | { type: 'blob'; blobId: string }, getBlob: (id: string) => Promise<Blob | undefined>) {
   if (source.type === 'asset') return { url: source.url, revoke: false }
   const blob = await getBlob(source.blobId)

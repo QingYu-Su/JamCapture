@@ -13,13 +13,14 @@ describe('Mureka describe client', () => {
   it('sends a base64 audio URL and accepts the wrapped response shape', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       result: {
-        instrument: ['Electric Guitar'], genres: ['Rock'], tags: ['Energetic'], description: 'A guitar-led rock idea.',
+        title: '暮色缓缓沉落', instrument: ['电吉他'], toneColor: ['温暖'], genres: ['摇滚'], key: 'Am',
+        emotion: ['克制', '忧郁'], bpm: '78', description: '温暖朦胧的旋律在暮色中缓慢铺展开来',
       },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await describeAudio(new Blob(['audio'], { type: 'audio/mpeg' }))
-    expect(result.genres).toEqual(['Rock'])
+    expect(result.genres).toEqual(['摇滚'])
     const request = fetchMock.mock.calls[0][1] as RequestInit
     expect(JSON.parse(String(request.body)).url).toMatch(/^data:audio\/mp3;base64,/)
   })
@@ -51,7 +52,8 @@ describe('Mureka describe client', () => {
   it('transcodes a WebM recording before submitting it to Mureka', async () => {
     convertAudioBlobToMp3.mockResolvedValue(new Blob(['mp3-audio'], { type: 'audio/mp3' }))
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      instrument: [], genres: [], tags: [], description: 'Converted recording',
+      title: '雨夜微光浮动', instrument: ['电吉他'], toneColor: ['朦胧'], genres: ['轻音乐'], key: '无',
+      emotion: ['安静', '克制'], bpm: '', description: '朦胧旋律在安静雨夜里缓慢流动并逐渐散开',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -59,5 +61,12 @@ describe('Mureka describe client', () => {
     expect(convertAudioBlobToMp3).toHaveBeenCalledOnce()
     const request = fetchMock.mock.calls[0][1] as RequestInit
     expect(JSON.parse(String(request.body)).url).toMatch(/^data:audio\/mp3;base64,/)
+  })
+
+  it('rejects malformed summaries so incomplete tags are never displayed', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      title: 'Bad 123', instrument: [], toneColor: [], genres: ['Rock'], key: 'unknown', emotion: [], bpm: 'fast', description: 'short',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    await expect(describeAudio(new Blob(['audio'], { type: 'audio/mp3' }))).rejects.toThrow('不符合音乐标签格式')
   })
 })
