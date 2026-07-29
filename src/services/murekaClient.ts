@@ -3,10 +3,14 @@ import { convertAudioBlobToMp3 } from '../utils/audio'
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024
 
-interface MurekaDescription {
+export interface MusicSummary {
+  title: string
   instrument: string[]
+  toneColor: string[]
   genres: string[]
-  tags: string[]
+  key: string
+  emotion: string[]
+  bpm: string
   description: string
 }
 
@@ -52,7 +56,7 @@ function blobTypeFromDataUrl(header: string) {
   return header.match(/^data:([^;]+)/)?.[1] ?? 'unknown'
 }
 
-export async function describeAudio(blob: Blob): Promise<MurekaDescription> {
+export async function describeAudio(blob: Blob): Promise<MusicSummary> {
   const compatibleBlob = /audio\/webm/i.test(blob.type) ? await convertAudioBlobToMp3(blob) : blob
   if (compatibleBlob.size > MAX_AUDIO_BYTES) throw new Error('转换后的音频超过 Mureka 允许的 10MB 上限')
   const dataUrl = normalizeMurekaAudioUrl(await blobToDataUrl(compatibleBlob))
@@ -64,23 +68,31 @@ export async function describeAudio(blob: Blob): Promise<MurekaDescription> {
   })
   const payload = await response.json().catch(() => ({})) as {
     error?: unknown
-    result?: MurekaDescription
+    result?: MusicSummary
+    title?: string
     instrument?: string[]
+    toneColor?: string[]
     genres?: string[]
-    tags?: string[]
+    key?: string
+    emotion?: string[]
+    bpm?: string
     description?: string
   }
-  if (!response.ok) throw new Error(errorMessage(payload.error, `Mureka 请求失败（${response.status}）`))
+  if (!response.ok) throw new Error(errorMessage(payload.error, `AI 音频分析失败（${response.status}）`))
 
   const result = payload.result ?? payload
   return {
+    title: result.title ?? '',
     instrument: result.instrument ?? [],
+    toneColor: result.toneColor ?? [],
     genres: result.genres ?? [],
-    tags: result.tags ?? [],
+    key: result.key ?? '',
+    emotion: result.emotion ?? [],
+    bpm: result.bpm ?? '',
     description: result.description ?? '',
   }
 }
 
-export function completedAnalysis(result: MurekaDescription): AudioAIAnalysis {
+export function completedAnalysis(result: MusicSummary): AudioAIAnalysis {
   return { status: 'complete', ...result, analyzedAt: new Date().toISOString() }
 }

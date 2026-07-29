@@ -23,12 +23,16 @@ function InstrumentIcon({ instrument }: { instrument: string }) {
 export function TrackCard({ track, selectionMode, selected, onSelect, onEdit, onExtend, onRetryAnalysis }: TrackCardProps) {
   const { current, playing, play } = usePlayer()
   const isPlaying = current?.id === track.id && playing
+  const isAnalyzing = track.aiAnalysis?.status === 'analyzing'
   const aiTags = track.aiAnalysis?.status === 'complete'
     ? [
-        ...(track.aiAnalysis.genres ?? []).slice(0, 2).map((label) => ({ label, className: 'tag-style' })),
+        ...(track.aiAnalysis.genres ?? []).slice(0, 1).map((label) => ({ label, className: 'tag-style' })),
         ...(track.aiAnalysis.instrument ?? []).slice(0, 1).map((label) => ({ label, className: 'tag-instrument' })),
-        ...(track.aiAnalysis.tags ?? []).slice(0, 4).map((label, index) => ({ label, className: index % 2 === 0 ? 'tag-mood' : 'tag-bpm' })),
-      ].slice(0, 6)
+        ...(track.aiAnalysis.toneColor ?? []).slice(0, 3).map((label) => ({ label, className: 'tag-tone' })),
+        ...(track.aiAnalysis.emotion ?? []).slice(0, 4).map((label) => ({ label, className: 'tag-mood' })),
+        ...(track.aiAnalysis.key && track.aiAnalysis.key !== '无' ? [{ label: track.aiAnalysis.key, className: 'tag-key' }] : []),
+        ...(track.aiAnalysis.bpm ? [{ label: `${track.aiAnalysis.bpm} BPM`, className: 'tag-bpm' }] : []),
+      ]
     : null
   return (
     <article className={cn('track-card', selected && 'track-card-selected')}>
@@ -78,6 +82,15 @@ export function TrackCard({ track, selectionMode, selected, onSelect, onEdit, on
       <div className="track-actions">
         <button className={cn('round-action', isPlaying && 'round-action-active')} onClick={() => void play(track)} aria-label={isPlaying ? '暂停' : '播放'}>
           {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+        </button>
+        <button
+          className="text-action"
+          onClick={onRetryAnalysis}
+          disabled={isAnalyzing}
+          aria-label={isAnalyzing ? `${track.title} 正在分析` : `重新分析 ${track.title}`}
+        >
+          {isAnalyzing ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
+          <span>{isAnalyzing ? '分析中' : '重新分析'}</span>
         </button>
         <button className="text-action" onClick={onEdit}><Edit3 size={16} /><span>编辑</span></button>
         <button className="extend-action" onClick={onExtend}><Sparkles size={16} /><span>灵感延伸</span></button>

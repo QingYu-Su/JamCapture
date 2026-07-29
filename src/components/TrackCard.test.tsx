@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InspirationTrack } from '../types'
 import { TrackCard } from './TrackCard'
@@ -25,16 +25,27 @@ describe('TrackCard AI analysis states', () => {
   it('shows a loading panel while analysis is pending', () => {
     render(<TrackCard {...actions} track={{ ...baseTrack, aiAnalysis: { status: 'analyzing' } }} />)
     expect(screen.getByText('AI 正在理解这段音频')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'AI Test 正在分析' })).toBeDisabled()
+  })
+
+  it('allows every completed item to request analysis again', () => {
+    const onRetryAnalysis = vi.fn()
+    render(<TrackCard {...actions} onRetryAnalysis={onRetryAnalysis} track={baseTrack} />)
+    fireEvent.click(screen.getByRole('button', { name: '重新分析 AI Test' }))
+    expect(onRetryAnalysis).toHaveBeenCalledOnce()
   })
 
   it('renders the returned description and tags', () => {
     render(<TrackCard {...actions} track={{ ...baseTrack, aiAnalysis: {
-      status: 'complete', description: 'A dynamic guitar performance.', genres: ['Alternative Rock'],
-      instrument: ['Electric Guitar'], tags: ['Energetic', 'Melodic'],
+      status: 'complete', title: '暮色缓缓沉落', description: '温暖朦胧的旋律在暮色中缓慢铺展开来', genres: ['摇滚'],
+      instrument: ['电吉他'], toneColor: ['温暖', '朦胧'], emotion: ['克制', '忧郁'], key: 'Am', bpm: '78',
     } }} />)
-    expect(screen.getByText('A dynamic guitar performance.')).toBeInTheDocument()
-    expect(screen.getByText('Alternative Rock')).toBeInTheDocument()
-    expect(screen.getByText('Energetic')).toBeInTheDocument()
+    expect(screen.getByText('温暖朦胧的旋律在暮色中缓慢铺展开来')).toBeInTheDocument()
+    expect(screen.getByText('摇滚')).toBeInTheDocument()
+    expect(screen.getByText('温暖')).toBeInTheDocument()
+    expect(screen.getByText('克制')).toBeInTheDocument()
+    expect(screen.getByText('Am')).toBeInTheDocument()
+    expect(screen.getByText('78 BPM')).toBeInTheDocument()
     expect(screen.queryByText('Raw')).not.toBeInTheDocument()
     expect(screen.queryByText('100 BPM')).not.toBeInTheDocument()
   })

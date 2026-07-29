@@ -130,10 +130,13 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         const latestTrack = await repository.getInspiration(track.id) ?? track
         const completedTrack: InspirationTrack = {
           ...latestTrack,
+          title: result.title || latestTrack.title,
           tags: {
             ...latestTrack.tags,
             style: result.genres[0] ?? latestTrack.tags.style,
             instrument: result.instrument[0] ?? latestTrack.tags.instrument,
+            mood: result.emotion.join(' / ') || latestTrack.tags.mood,
+            bpm: result.bpm || latestTrack.tags.bpm,
           },
           aiAnalysis: completedAnalysis(result),
         }
@@ -162,6 +165,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       const shouldStart = track.aiAnalysis?.status === 'analyzing'
         || (track.aiAnalysis?.status === 'failed' && (
           track.aiAnalysis.error?.includes('config.yaml')
+          || track.aiAnalysis.error?.includes('deepseek_api_key')
           || track.aiAnalysis.error?.includes('当前录音为 WebM')
           || track.aiAnalysis.error?.includes('Mureka 仅支持 MP3/M4A')
         ))

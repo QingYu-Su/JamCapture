@@ -94,7 +94,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .tag { padding: 4px 8px; border-radius: 999px; font-size: 9px; font-weight: 650; border: 1px solid transparent; }
 .tag-style { color: #d88787; background: rgba(159,55,55,.12); border-color: rgba(190,67,67,.16); }
 .tag-instrument { color: #8ca5c6; background: rgba(64,91,126,.13); border-color: rgba(88,120,162,.16); }
+.tag-tone { color: #c18f83; background: rgba(124,68,54,.13); border-color: rgba(158,84,66,.17); }
 .tag-mood { color: #aa94c1; background: rgba(100,72,126,.13); border-color: rgba(131,94,164,.16); }
+.tag-key { color: #8eaaa5; background: rgba(57,102,94,.13); border-color: rgba(73,128,118,.16); }
 .tag-bpm { color: #bca77a; background: rgba(128,100,44,.12); border-color: rgba(159,125,53,.16); }
 .ai-analysis-loading { position: relative; max-width: 680px; min-height: 48px; margin-top: 10px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; overflow: hidden; border: 1px solid #3b2a2a; border-radius: 7px; background: #1a1515; color: #a75a5a; }
 .ai-analysis-loading > div { display: grid; gap: 3px; }

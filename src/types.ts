@@ -13,9 +13,13 @@ export type AudioSource =
 
 export interface AudioAIAnalysis {
   status: 'analyzing' | 'complete' | 'failed'
+  title?: string
   instrument?: string[]
+  toneColor?: string[]
   genres?: string[]
-  tags?: string[]
+  key?: string
+  emotion?: string[]
+  bpm?: string
   description?: string
   error?: string
   analyzedAt?: string
