@@ -1,11 +1,11 @@
 import { Check, Copy, Link2, LoaderCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import type { InspirationTrack } from '../types'
+import type { PlayableTrack } from '../types'
 import { createReadOnlyShare } from '../services/shareClient'
 import { Modal } from './Modal'
 
 interface ShareTrackModalProps {
-  track: InspirationTrack | null
+  track: PlayableTrack | null
   getBlob: (id: string) => Promise<Blob | undefined>
   onClose: () => void
 }
@@ -49,7 +49,7 @@ export function ShareTrackModal({ track, getBlob, onClose }: ShareTrackModalProp
   }
 
   return (
-    <Modal open={Boolean(track)} onOpenChange={(open) => !open && onClose()} title="分享灵感" description="获得链接的人只能播放这段音频" size="sm">
+    <Modal open={Boolean(track)} onOpenChange={(open) => !open && onClose()} title={track?.kind === 'generated' ? '分享作品' : '分享灵感'} description="获得链接的人只能播放这段音频" size="sm">
       <div className="share-panel">
         <div className="share-track-name"><Link2 size={17} /><span>{track?.title}</span></div>
         {!url && !error && <div className="share-loading"><LoaderCircle className="spin" size={18} /><span>正在生成只读分享链接</span></div>}

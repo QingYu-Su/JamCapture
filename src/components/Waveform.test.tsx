@@ -20,4 +20,11 @@ describe('Waveform', () => {
     fireEvent.change(slider, { target: { value: '750' } })
     expect(onSeek).toHaveBeenCalledWith(0.75)
   })
+
+  it('keeps every waveform bar visually static regardless of playback progress', () => {
+    const { container, rerender } = render(<Waveform data={[20, 40, 60]} progress={0.2} active />)
+    expect(container.querySelectorAll('.wave-bar-filled, .waveform-active')).toHaveLength(0)
+    rerender(<Waveform data={[20, 40, 60]} progress={0.9} active={false} />)
+    expect(container.querySelectorAll('.wave-bar-filled, .waveform-active')).toHaveLength(0)
+  })
 })

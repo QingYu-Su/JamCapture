@@ -1,4 +1,4 @@
-import type { InspirationTrack } from '../types'
+import type { PlayableTrack } from '../types'
 
 function encodeMetadata(value: unknown) {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
@@ -7,7 +7,7 @@ function encodeMetadata(value: unknown) {
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 }
 
-async function trackAudioBlob(track: InspirationTrack, getBlob: (id: string) => Promise<Blob | undefined>) {
+async function trackAudioBlob(track: PlayableTrack, getBlob: (id: string) => Promise<Blob | undefined>) {
   if (track.audioSource.type === 'blob') {
     const blob = await getBlob(track.audioSource.blobId)
     if (!blob) throw new Error('找不到需要分享的音频文件')
@@ -18,14 +18,21 @@ async function trackAudioBlob(track: InspirationTrack, getBlob: (id: string) => 
   return response.blob()
 }
 
-export async function createReadOnlyShare(track: InspirationTrack, getBlob: (id: string) => Promise<Blob | undefined>) {
+export async function createReadOnlyShare(track: PlayableTrack, getBlob: (id: string) => Promise<Blob | undefined>) {
   const audio = await trackAudioBlob(track, getBlob)
+  const inspiration = track.kind === 'inspiration'
   const metadata = encodeMetadata({
+    kind: track.kind,
     title: track.title,
     duration: track.duration,
     waveform: track.waveform,
-    tags: track.tags,
-    description: track.aiAnalysis?.status === 'complete' ? track.aiAnalysis.description : undefined,
+    subtitle: inspiration ? '原始灵感录音' : 'AI 延伸作品',
+    tags: inspiration
+      ? [track.tags.style, track.tags.instrument, track.tags.mood, track.tags.bpm].filter(Boolean)
+      : [track.mode === 'full' ? '完整作品' : '单乐器延伸', track.style].filter(Boolean),
+    description: inspiration
+      ? (track.aiAnalysis?.status === 'complete' ? track.aiAnalysis.description : undefined)
+      : track.prompt,
   })
   const response = await fetch('/api/shares', {
     method: 'POST',
@@ -38,10 +45,12 @@ export async function createReadOnlyShare(track: InspirationTrack, getBlob: (id:
 }
 
 export interface SharedTrack {
+  kind: 'inspiration' | 'generated'
   title: string
+  subtitle?: string
   duration: number
   waveform: number[]
-  tags: InspirationTrack['tags']
+  tags: string[]
   description?: string
   createdAt: string
   audioUrl: string
@@ -49,7 +58,11 @@ export interface SharedTrack {
 
 export async function getSharedTrack(token: string) {
   const response = await fetch(`/api/shares/${encodeURIComponent(token)}`)
-  const payload = await response.json().catch(() => ({})) as SharedTrack & { error?: string }
+  const payload = await response.json().catch(() => ({})) as SharedTrack & { error?: string; tags?: string[] | Record<string, string> }
   if (!response.ok) throw new Error(payload.error || '无法读取分享内容')
-  return payload
+  return {
+    ...payload,
+    kind: payload.kind === 'generated' ? 'generated' : 'inspiration',
+    tags: Array.isArray(payload.tags) ? payload.tags.filter(Boolean) : Object.values(payload.tags ?? {}).filter(Boolean),
+  } as SharedTrack
 }

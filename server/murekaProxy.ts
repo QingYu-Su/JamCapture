@@ -37,10 +37,12 @@ interface CachedAnalysis {
 }
 
 interface SharedTrackMetadata {
+  kind: 'inspiration' | 'generated'
   title: string
+  subtitle?: string
   duration: number
   waveform: number[]
-  tags: { style: string; instrument: string; mood: string; bpm: string }
+  tags: string[]
   description?: string
   audioMimeType: string
   createdAt: string
@@ -354,7 +356,9 @@ function createShareHandler(root: string) {
         const directory = shareDirectory(root)
         const metadata: SharedTrackMetadata = {
           ...raw,
+          kind: raw.kind === 'generated' ? 'generated' : 'inspiration',
           title: raw.title.trim().slice(0, 120),
+          tags: Array.isArray(raw.tags) ? raw.tags.filter((tag) => typeof tag === 'string' && tag.trim()).slice(0, 8) : [],
           audioMimeType: String(request.headers['content-type'] || 'audio/mpeg').split(';')[0],
           createdAt: new Date().toISOString(),
         }
