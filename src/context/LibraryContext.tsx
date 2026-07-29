@@ -1,27 +1,39 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { fallbackWaveform } from '../data/demoTracks'
 import { repository } from '../services/repository'
 import type { GeneratedTrack, GenerationRequest, InspirationTrack } from '../types'
 import { analyzeAudioBlob } from '../utils/audio'
+import { completedAnalysis, describeAudio } from '../services/murekaClient'
 
 const WAVEFORM_VERSION = 2
 const waveformAnalysisJobs = new Map<string, Promise<InspirationTrack | null>>()
+const aiAnalysisJobs = new Map<string, Promise<InspirationTrack>>()
+let aiRequestQueue: Promise<unknown> = Promise.resolve()
+
+function enqueueAIRequest<T>(request: () => Promise<T>) {
+  const result = aiRequestQueue.then(request, request)
+  aiRequestQueue = result.then(() => undefined, () => undefined)
+  return result
+}
+
+async function getTrackBlob(track: InspirationTrack) {
+  if (track.audioSource.type === 'blob') return repository.getAudioBlob(track.audioSource.blobId)
+  const response = await fetch(track.audioSource.url)
+  if (!response.ok) throw new Error(`无法读取音频：${track.audioSource.url}`)
+  return response.blob()
+}
 
 function analyzeTrack(track: InspirationTrack) {
   const existing = waveformAnalysisJobs.get(track.id)
   if (existing) return existing
 
   const job = (async () => {
-    const blob = track.audioSource.type === 'asset'
-      ? await fetch(track.audioSource.url).then((response) => {
-          if (!response.ok) throw new Error(`无法读取音频：${track.audioSource.type === 'asset' ? track.audioSource.url : track.id}`)
-          return response.blob()
-        })
-      : await repository.getAudioBlob(track.audioSource.blobId)
+    const blob = await getTrackBlob(track)
     if (!blob) return null
     const analysis = await analyzeAudioBlob(blob)
+    const latestTrack = await repository.getInspiration(track.id) ?? track
     const analyzedTrack = {
-      ...track,
+      ...latestTrack,
       waveform: analysis.waveform,
       waveformVersion: WAVEFORM_VERSION,
       duration: analysis.duration,
@@ -42,6 +54,7 @@ interface LibraryContextValue {
   updateInspiration: (track: InspirationTrack) => Promise<void>
   deleteInspiration: (track: InspirationTrack) => Promise<void>
   generateDemo: (request: GenerationRequest) => Promise<GeneratedTrack>
+  analyzeInspiration: (track: InspirationTrack) => Promise<void>
   getBlob: (id: string) => Promise<Blob | undefined>
 }
 
@@ -51,6 +64,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const [inspirations, setInspirations] = useState<InspirationTrack[]>([])
   const [generated, setGenerated] = useState<GeneratedTrack[]>([])
   const [loading, setLoading] = useState(true)
+  const automaticallyStarted = useRef(new Set<string>())
 
   useEffect(() => {
     let active = true
@@ -61,7 +75,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       ])
       if (active) {
         // Remove obsolete sample arrays immediately; each audio file is then decoded independently.
-        setInspirations(inspirationData.map((track) => track.waveformVersion === WAVEFORM_VERSION ? track : { ...track, waveform: [] }))
+        setInspirations(inspirationData.map((track) => ({
+          ...track,
+          waveform: track.waveformVersion === WAVEFORM_VERSION ? track.waveform : [],
+          aiAnalysis: track.aiAnalysis ?? { status: 'analyzing' },
+        })))
         setGenerated(generatedData)
         setLoading(false)
       }
@@ -82,8 +100,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const saveInspiration = useCallback(async (track: InspirationTrack, blob?: Blob) => {
-    await repository.saveInspiration(track, blob)
-    setInspirations((items) => [track, ...items.filter((item) => item.id !== track.id)])
+    const analyzingTrack: InspirationTrack = { ...track, aiAnalysis: { status: 'analyzing' } }
+    await repository.saveInspiration(analyzingTrack, blob)
+    setInspirations((items) => [analyzingTrack, ...items.filter((item) => item.id !== track.id)])
   }, [])
 
   const updateInspiration = useCallback(async (track: InspirationTrack) => {
@@ -95,6 +114,62 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     await repository.deleteInspiration(track)
     setInspirations((items) => items.filter((item) => item.id !== track.id))
   }, [])
+
+  const analyzeInspiration = useCallback(async (track: InspirationTrack) => {
+    const analyzingTrack: InspirationTrack = { ...track, aiAnalysis: { status: 'analyzing' } }
+    setInspirations((items) => items.map((item) => item.id === track.id ? analyzingTrack : item))
+    await repository.saveInspiration(analyzingTrack)
+
+    let job = aiAnalysisJobs.get(track.id)
+    if (!job) {
+      job = (async () => {
+        const blob = await getTrackBlob(track)
+        if (!blob) throw new Error('找不到需要分析的音频文件')
+        // Mureka requests are serialized to avoid rate-limit failures when several legacy items resume together.
+        const result = await enqueueAIRequest(() => describeAudio(blob))
+        const latestTrack = await repository.getInspiration(track.id) ?? track
+        const completedTrack: InspirationTrack = {
+          ...latestTrack,
+          tags: {
+            ...latestTrack.tags,
+            style: result.genres[0] ?? latestTrack.tags.style,
+            instrument: result.instrument[0] ?? latestTrack.tags.instrument,
+          },
+          aiAnalysis: completedAnalysis(result),
+        }
+        await repository.saveInspiration(completedTrack)
+        return completedTrack
+      })().finally(() => aiAnalysisJobs.delete(track.id))
+      aiAnalysisJobs.set(track.id, job)
+    }
+
+    try {
+      const completedTrack = await job
+      setInspirations((items) => items.map((item) => item.id === track.id ? completedTrack : item))
+    } catch (error) {
+      const latestTrack = await repository.getInspiration(track.id) ?? track
+      const failedTrack: InspirationTrack = {
+        ...latestTrack,
+        aiAnalysis: { status: 'failed', error: error instanceof Error ? error.message : 'AI 音频理解失败' },
+      }
+      await repository.saveInspiration(failedTrack)
+      setInspirations((items) => items.map((item) => item.id === track.id ? failedTrack : item))
+    }
+  }, [])
+
+  useEffect(() => {
+    for (const track of inspirations) {
+      const shouldStart = track.aiAnalysis?.status === 'analyzing'
+        || (track.aiAnalysis?.status === 'failed' && (
+          track.aiAnalysis.error?.includes('config.yaml')
+          || track.aiAnalysis.error?.includes('当前录音为 WebM')
+          || track.aiAnalysis.error?.includes('Mureka 仅支持 MP3/M4A')
+        ))
+      if (!shouldStart || automaticallyStarted.current.has(track.id)) continue
+      automaticallyStarted.current.add(track.id)
+      void analyzeInspiration(track)
+    }
+  }, [analyzeInspiration, inspirations])
 
   const generateDemo = useCallback(async (request: GenerationRequest) => {
     // The delay deliberately models an async cloud job while keeping the adapter replaceable.
@@ -121,8 +196,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({
     inspirations, generated, loading, saveInspiration, updateInspiration,
-    deleteInspiration, generateDemo, getBlob: repository.getAudioBlob,
-  }), [deleteInspiration, generateDemo, generated, inspirations, loading, saveInspiration, updateInspiration])
+    deleteInspiration, generateDemo, analyzeInspiration, getBlob: repository.getAudioBlob,
+  }), [analyzeInspiration, deleteInspiration, generateDemo, generated, inspirations, loading, saveInspiration, updateInspiration])
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>
 }

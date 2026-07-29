@@ -13,7 +13,7 @@ import { filterTracks } from '../utils/tracks'
 const initialFilters: TrackFilters = { query: '', instrument: 'all', style: 'all', date: 'all' }
 
 export function LibraryPage() {
-  const { inspirations, loading, saveInspiration, updateInspiration, deleteInspiration } = useLibrary()
+  const { inspirations, loading, saveInspiration, updateInspiration, deleteInspiration, analyzeInspiration } = useLibrary()
   const { stopIfTrack } = usePlayer()
   const [filters, setFilters] = useState(initialFilters)
   const [selectionMode, setSelectionMode] = useState(false)
@@ -51,7 +51,7 @@ export function LibraryPage() {
       <div className="section-heading"><div><h2>最近捕捉</h2><span>{visibleTracks.length} / {inspirations.length} CAPTURES</span></div><div className="live-indicator"><CircleDot size={13} />本地同步</div></div>
       <section className="track-list" aria-live="polite">
         {loading ? <div className="loading-state"><span /><span /><span /></div> : visibleTracks.length ? visibleTracks.map((track) => (
-          <TrackCard key={track.id} track={track} selectionMode={selectionMode} selected={selectedIds.has(track.id)} onSelect={() => toggleSelect(track.id)} onEdit={() => setEditingTrack(track)} onExtend={() => setGenerationTracks([track])} />
+          <TrackCard key={track.id} track={track} selectionMode={selectionMode} selected={selectedIds.has(track.id)} onSelect={() => toggleSelect(track.id)} onEdit={() => setEditingTrack(track)} onExtend={() => setGenerationTracks([track])} onRetryAnalysis={() => void analyzeInspiration(track)} />
         )) : <div className="empty-state"><Mic size={30} /><h3>这里还没有匹配的灵感</h3><p>调整筛选条件，或录下此刻脑海中的声音。</p><button onClick={() => setFilters(initialFilters)}>清除筛选</button></div>}
       </section>
       <button className="record-fab" onClick={() => setRecordingOpen(true)} aria-label="开始录制"><span className="fab-ring"><Mic size={25} /></span><span>开始录制</span></button>

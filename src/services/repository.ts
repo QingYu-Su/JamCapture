@@ -46,6 +46,10 @@ export const repository = {
     )
   },
 
+  async getInspiration(id: string) {
+    return (await getDatabase()).get('inspirations', id)
+  },
+
   async saveInspiration(track: InspirationTrack, blob?: Blob) {
     const db = await getDatabase()
     const stores = blob ? ['inspirations', 'audioBlobs'] as const : ['inspirations'] as const

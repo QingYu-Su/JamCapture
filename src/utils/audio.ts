@@ -52,3 +52,43 @@ export function waveformFromChannelData(channels: Float32Array[], bars = 48) {
   const peak = Math.max(...amplitudes, 0.001)
   return amplitudes.map((amplitude) => Math.max(12, Math.round((amplitude / peak) * 100)))
 }
+
+function floatSamplesToInt16(samples: Float32Array) {
+  const pcm = new Int16Array(samples.length)
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index]))
+    pcm[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff
+  }
+  return pcm
+}
+
+export async function encodePcmToMp3(channels: Float32Array[], sampleRate: number, kbps = 192) {
+  const { Mp3Encoder } = await import('@breezystack/lamejs')
+  const channelCount = Math.min(2, Math.max(1, channels.length))
+  const left = floatSamplesToInt16(channels[0] ?? new Float32Array())
+  const right = channelCount === 2 ? floatSamplesToInt16(channels[1]) : undefined
+  const encoder = new Mp3Encoder(channelCount, sampleRate, kbps)
+  const chunks: ArrayBuffer[] = []
+  const blockSize = 1152
+
+  for (let offset = 0, block = 0; offset < left.length; offset += blockSize, block += 1) {
+    const encoded = encoder.encodeBuffer(left.subarray(offset, offset + blockSize), right?.subarray(offset, offset + blockSize))
+    if (encoded.length) chunks.push(encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength) as ArrayBuffer)
+    // Long takes remain responsive while the pure-JS encoder processes each PCM block.
+    if (block > 0 && block % 32 === 0) await new Promise((resolve) => window.setTimeout(resolve, 0))
+  }
+  const flushed = encoder.flush()
+  if (flushed.length) chunks.push(flushed.buffer.slice(flushed.byteOffset, flushed.byteOffset + flushed.byteLength) as ArrayBuffer)
+  return new Blob(chunks, { type: 'audio/mp3' })
+}
+
+export async function convertAudioBlobToMp3(blob: Blob) {
+  const context = new AudioContext()
+  try {
+    const buffer = await context.decodeAudioData(await blob.arrayBuffer())
+    const channels = Array.from({ length: Math.min(2, buffer.numberOfChannels) }, (_, index) => buffer.getChannelData(index).slice())
+    return encodePcmToMp3(channels, buffer.sampleRate)
+  } finally {
+    await context.close()
+  }
+}

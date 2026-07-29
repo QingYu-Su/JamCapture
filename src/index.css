@@ -96,6 +96,17 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .tag-instrument { color: #8ca5c6; background: rgba(64,91,126,.13); border-color: rgba(88,120,162,.16); }
 .tag-mood { color: #aa94c1; background: rgba(100,72,126,.13); border-color: rgba(131,94,164,.16); }
 .tag-bpm { color: #bca77a; background: rgba(128,100,44,.12); border-color: rgba(159,125,53,.16); }
+.ai-analysis-loading { position: relative; max-width: 680px; min-height: 48px; margin-top: 10px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; overflow: hidden; border: 1px solid #3b2a2a; border-radius: 7px; background: #1a1515; color: #a75a5a; }
+.ai-analysis-loading > div { display: grid; gap: 3px; }
+.ai-analysis-loading strong { color: #bdb2af; font-size: 9px; }
+.ai-analysis-loading span { color: #68615e; font-size: 8px; }
+.ai-analysis-loading i { position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.035), transparent); animation: ai-scan 1.4s ease-in-out infinite; }
+.ai-insight { max-width: 680px; margin-top: 10px; padding: 10px 12px; border: 1px solid rgba(157,63,63,.18); border-radius: 7px; background: rgba(61,30,30,.14); }
+.ai-insight-title { display: flex; align-items: center; gap: 6px; color: #b85a5a; font-size: 8px; font-weight: 780; letter-spacing: 1.1px; }
+.ai-insight p { margin: 7px 0 8px; color: #978e8a; font-size: 9px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ai-analysis-failed { max-width: 680px; min-height: 39px; margin-top: 10px; padding: 7px 9px; display: flex; align-items: center; gap: 7px; border: 1px solid rgba(169,69,69,.22); border-radius: 7px; background: rgba(91,34,34,.11); color: #a86c6c; font-size: 8px; }
+.ai-analysis-failed > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-analysis-failed button { margin-left: auto; flex: 0 0 auto; padding: 5px 8px; display: flex; align-items: center; gap: 4px; border: 1px solid #613333; border-radius: 999px; background: #291a1a; color: #c38383; font-size: 8px; cursor: pointer; }
 .track-meta { margin-top: 10px; display: flex; align-items: center; gap: 8px; color: #69625f; font-size: 9px; letter-spacing: .4px; }
 .track-meta i { width: 2px; height: 2px; background: #554f4c; border-radius: 50%; }
 .track-actions { display: flex; align-items: center; gap: 8px; }
@@ -253,6 +264,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 @keyframes record-pulse { 50% { box-shadow: 0 0 0 8px rgba(225,71,71,.03); opacity: .72 } }
 @keyframes wave-pulse { to { opacity: .72; transform: scaleY(.92) } }
 @keyframes loading { to { background-position: -200% 0 } }
+@keyframes ai-scan { 60%, 100% { transform: translateX(100%) } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }

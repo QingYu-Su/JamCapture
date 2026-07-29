@@ -11,6 +11,16 @@ export type AudioSource =
   | { type: 'asset'; url: string }
   | { type: 'blob'; blobId: string }
 
+export interface AudioAIAnalysis {
+  status: 'analyzing' | 'complete' | 'failed'
+  instrument?: string[]
+  genres?: string[]
+  tags?: string[]
+  description?: string
+  error?: string
+  analyzedAt?: string
+}
+
 export interface InspirationTrack {
   id: string
   kind: 'inspiration'
@@ -18,6 +28,7 @@ export interface InspirationTrack {
   audioSource: AudioSource
   waveform: number[]
   waveformVersion?: number
+  aiAnalysis?: AudioAIAnalysis
   tags: TrackTags
   recordedAt: string
   duration: number

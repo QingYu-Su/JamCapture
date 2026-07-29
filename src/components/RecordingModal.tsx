@@ -47,7 +47,13 @@ export function RecordingModal({ open, onClose, onSave }: RecordingModalProps) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } })
         if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return }
         streamRef.current = stream
-        const recorder = new MediaRecorder(stream)
+        const preferredMimeType = [
+          'audio/mp4;codecs=mp4a.40.2',
+          'audio/mp4',
+          'audio/webm;codecs=opus',
+        ].find((type) => MediaRecorder.isTypeSupported(type))
+        // Prefer M4A-compatible recording so the completed file can be sent directly to Mureka.
+        const recorder = new MediaRecorder(stream, preferredMimeType ? { mimeType: preferredMimeType } : undefined)
         recorderRef.current = recorder
         recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data) }
         recorder.start(250)
