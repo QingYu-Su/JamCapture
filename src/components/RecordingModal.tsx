@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircle, Mic, Pause, Play, Square } from 'lucide-react'
-import type { InspirationTrack } from '../types'
+import type { InspirationTrack, RecordingType } from '../types'
 import { analyzeAudioBlob, waveformFromSamples } from '../utils/audio'
 import { formatDuration } from '../utils/format'
 import { Modal } from './Modal'
@@ -9,12 +9,13 @@ import { Waveform } from './Waveform'
 type RecordingState = 'requesting' | 'recording' | 'paused' | 'processing' | 'error'
 
 interface RecordingModalProps {
+  recordingType: RecordingType
   open: boolean
   onClose: () => void
   onSave: (track: InspirationTrack, blob: Blob) => Promise<void>
 }
 
-export function RecordingModal({ open, onClose, onSave }: RecordingModalProps) {
+export function RecordingModal({ recordingType, open, onClose, onSave }: RecordingModalProps) {
   const [status, setStatus] = useState<RecordingState>('requesting')
   const [seconds, setSeconds] = useState(0)
   const [waveform, setWaveform] = useState<number[]>(Array(48).fill(18))
@@ -117,6 +118,7 @@ export function RecordingModal({ open, onClose, onSave }: RecordingModalProps) {
       id, kind: 'inspiration', title: `New Capture ${new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(new Date())}`,
       audioSource: { type: 'blob', blobId: id }, waveform: completeWaveform, waveformVersion: 2, tags: { style: 'Unsorted', instrument: 'Guitar', mood: 'Raw', bpm: '— BPM' },
       recordedAt: new Date().toISOString(), duration: completeDuration,
+      recordingType,
     }
     cleanup()
     await onSave(track, blob)

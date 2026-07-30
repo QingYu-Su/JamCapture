@@ -78,7 +78,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         setInspirations(inspirationData.map((track) => {
           const analysisIsCurrent = track.aiAnalysis?.status === 'complete'
             && track.aiAnalysis.analysisVersion === AI_ANALYSIS_VERSION
-            && track.aiAnalysis.promptSuggestions?.length === 3
+            && (track.recordingType === 'vocal' || track.aiAnalysis.promptSuggestions?.length === 3)
           return {
             ...track,
             waveform: track.waveformVersion === AUDIO_WAVEFORM_VERSION ? track.waveform : [],
@@ -107,7 +107,13 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const saveInspiration = useCallback(async (track: InspirationTrack, blob?: Blob) => {
-    const analyzingTrack: InspirationTrack = { ...track, aiAnalysis: { status: 'analyzing' } }
+    let storedTrack = track
+    if (track.recordingType === 'vocal' && !track.hummingSequence) {
+      const existingHummingCount = (await repository.getInspirations()).filter((item) => item.recordingType === 'vocal').length
+      const hummingSequence = existingHummingCount + 1
+      storedTrack = { ...track, title: `哼唱灵感${hummingSequence}`, hummingSequence }
+    }
+    const analyzingTrack: InspirationTrack = { ...storedTrack, aiAnalysis: { status: 'analyzing' } }
     await repository.saveInspiration(analyzingTrack, blob)
     setInspirations((items) => [analyzingTrack, ...items.filter((item) => item.id !== track.id)])
   }, [])
@@ -133,7 +139,17 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         const blob = await getTrackBlob(track)
         if (!blob) throw new Error('找不到需要分析的音频文件')
         // Mureka requests are serialized to avoid rate-limit failures when several legacy items resume together.
-        const result = await enqueueAIRequest(() => describeAudio(blob, options))
+        const storedTracks = await repository.getInspirations()
+        const existingHummingCount = track.recordingType === 'vocal'
+          ? track.hummingSequence
+            ? track.hummingSequence - 1
+            : storedTracks.filter((item) => item.id !== track.id && item.recordingType === 'vocal').length
+          : undefined
+        const result = await enqueueAIRequest(() => describeAudio(blob, {
+          ...options,
+          recordingType: track.recordingType,
+          existingHummingCount,
+        }))
         const latestTrack = await repository.getInspiration(track.id) ?? track
         const completedTrack: InspirationTrack = {
           ...latestTrack,
@@ -142,7 +158,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
             ...latestTrack.tags,
             style: result.genres[0] ?? latestTrack.tags.style,
             instrument: result.instrument[0] ?? latestTrack.tags.instrument,
-            mood: result.emotion.join(' / ') || latestTrack.tags.mood,
+            mood: (track.recordingType === 'vocal' ? result.emotion.join('、') : result.emotion.join(' / ')) || latestTrack.tags.mood,
             bpm: result.bpm || latestTrack.tags.bpm,
           },
           aiAnalysis: completedAnalysis(result),

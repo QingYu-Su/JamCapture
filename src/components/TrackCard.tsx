@@ -29,7 +29,7 @@ export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis, onShare }:
         ...(track.aiAnalysis.bpm ? [{ label: `${track.aiAnalysis.bpm} BPM`, className: 'tag-bpm' }] : []),
       ]
     : null
-  const hasAIContent = Boolean(aiTags?.length && track.aiAnalysis?.description?.trim())
+  const hasAITags = Boolean(aiTags?.length)
   const showOriginalTags = !track.aiAnalysis
 
   useEffect(() => {
@@ -63,8 +63,8 @@ export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis, onShare }:
           <div><h3>{track.title}</h3><span className="track-index">CAPTURE / {track.id.slice(-4).toUpperCase()}</span></div>
         </div>
         <Waveform data={track.waveform} active={isPlaying} className="track-wave" />
-        {(hasAIContent || showOriginalTags) && <div className="tag-row">
-          {hasAIContent ? aiTags?.map((tag, index) => (
+        {(hasAITags || showOriginalTags) && <div className="tag-row">
+          {hasAITags ? aiTags?.map((tag, index) => (
             <span key={`${tag.className}-${tag.label}-${index}`} className={`tag ${tag.className}`}>{tag.label}</span>
           )) : <>
             <span className="tag tag-style">{track.tags.style}</span>
@@ -80,7 +80,7 @@ export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis, onShare }:
             <i />
           </div>
         )}
-        {track.aiAnalysis?.status === 'complete' && hasAIContent && <p className="ai-description">{track.aiAnalysis.description}</p>}
+        {track.aiAnalysis?.status === 'complete' && track.aiAnalysis.description?.trim() && <p className="ai-description">{track.aiAnalysis.description}</p>}
         {track.aiAnalysis?.status === 'failed' && (
           <div className="ai-analysis-failed"><AlertCircle size={14} /><span>{track.aiAnalysis.error}</span></div>
         )}

@@ -1,4 +1,5 @@
 export type TagKind = 'style' | 'instrument' | 'mood' | 'bpm'
+export type RecordingType = 'instrument' | 'vocal'
 
 export interface TrackTags {
   style: string
@@ -43,6 +44,8 @@ export interface InspirationTrack {
   tags: TrackTags
   recordedAt: string
   duration: number
+  recordingType?: RecordingType
+  hummingSequence?: number
 }
 
 export type GenerationMode = 'instrument' | 'full'

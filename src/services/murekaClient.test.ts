@@ -46,6 +46,22 @@ describe('Mureka describe client', () => {
     expect(JSON.parse(String(request.body)).forceRefresh).toBe(true)
   })
 
+  it('marks humming recordings and sends their existing inventory count', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      title: '哼唱灵感6', instrument: ['人声哼唱'], emotion: ['松弛', '随性'],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await describeAudio(new Blob(['audio'], { type: 'audio/mpeg' }), {
+      recordingType: 'vocal',
+      existingHummingCount: 5,
+    })
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(String(request.body))).toMatchObject({ recordingType: 'vocal', existingHummingCount: 5 })
+    expect(result).toMatchObject({ title: '哼唱灵感6', instrument: ['人声哼唱'], emotion: ['松弛', '随性'] })
+  })
+
   it('surfaces configuration errors returned by the local proxy', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ error: '请先在 config.yaml 中配置 api_key' }),
