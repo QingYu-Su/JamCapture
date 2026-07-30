@@ -8,7 +8,7 @@ vi.mock('../context/LibraryContext', () => ({
 }))
 
 vi.mock('../services/murekaLyricsClient', () => ({
-  expandLyrics: vi.fn().mockResolvedValue('[主歌]\n扩写后的完整歌词'),
+  optimizeLyricsPrompt: vi.fn().mockResolvedValue('以雨夜独行为场景，描写孤独逐渐转向释然的情绪变化。'),
 }))
 
 vi.mock('react-router-dom', async () => {
@@ -45,17 +45,37 @@ describe('GenerationModal', () => {
     expect(screen.queryByText('完整作品延伸')).not.toBeInTheDocument()
     expect(screen.queryByText('AI 推荐风格')).not.toBeInTheDocument()
 
-    expect(screen.getByRole('radio', { name: /纯音乐生成/ })).toBeChecked()
-    fireEvent.click(screen.getByRole('radio', { name: /完整词曲生成/ }))
-    const lyrics = screen.getByRole('textbox', { name: '歌词内容' })
-    const expand = screen.getByRole('button', { name: 'AI 扩写歌词' })
+    expect(screen.queryByText('生成方式')).not.toBeInTheDocument()
+    expect(screen.queryByText('完整词曲生成')).not.toBeInTheDocument()
+    const lyrics = screen.getByRole('textbox', { name: '歌词内容构思' })
+    const prompt = screen.getByRole('textbox', { name: '创作风格与演绎要求' })
+    const expand = screen.getByRole('button', { name: 'AI 优化歌词构思' })
+    expect(lyrics).toHaveAttribute('maxlength', '180')
+    expect(prompt).toHaveAttribute('maxlength', '180')
     expect(expand).toBeDisabled()
     fireEvent.change(lyrics, { target: { value: '雨夜里独自前行' } })
     expect(expand).toBeEnabled()
     fireEvent.click(expand)
-    await waitFor(() => expect(lyrics).toHaveValue('[主歌]\n扩写后的完整歌词'))
+    await waitFor(() => expect(lyrics).toHaveValue('以雨夜独行为场景，描写孤独逐渐转向释然的情绪变化。'))
 
     fireEvent.click(screen.getByText('朦胧回响'))
-    expect(screen.getByRole('textbox', { name: '创作意图' })).toHaveValue(track.aiAnalysis?.promptSuggestions?.[1].text)
+    expect(prompt).toHaveValue(track.aiAnalysis?.promptSuggestions?.[1].text)
+  })
+
+  it('only offers full song generation for humming inspirations', () => {
+    const hummingTrack: InspirationTrack = {
+      ...track,
+      id: 'humming-track',
+      title: '哼唱灵感1',
+      recordingType: 'vocal',
+      tags: { ...track.tags, instrument: '人声哼唱' },
+    }
+
+    render(<GenerationModal open tracks={[hummingTrack]} onClose={vi.fn()} />)
+
+    expect(screen.queryByText('生成方式')).not.toBeInTheDocument()
+    expect(screen.queryByText('完整词曲生成')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '歌词内容构思' })).toBeInTheDocument()
+    expect(screen.queryByText('AI Prompt 建议')).not.toBeInTheDocument()
   })
 })

@@ -221,12 +221,13 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 @keyframes vinyl-spin { to { transform: rotate(360deg); } }
 @keyframes player-page-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
 
-.dialog-overlay { position: fixed; z-index: 70; inset: 0; background: rgba(3,2,2,.78); backdrop-filter: blur(6px); animation: fade-in .18s ease-out; }
-.dialog-content { position: fixed; z-index: 71; left: 50%; top: 50%; width: calc(100vw - 30px); max-height: calc(100vh - 40px); overflow: auto; transform: translate(-50%, -50%); background: #151313; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; box-shadow: 0 30px 100px rgba(0,0,0,.7); animation: dialog-in .2s cubic-bezier(.2,.8,.2,1); }
+.dialog-overlay { position: fixed; z-index: 70; inset: 0; background: rgba(3,2,2,.88); animation: fade-in .18s ease-out; }
+.dialog-content { position: fixed; z-index: 71; left: 50%; top: 50%; width: calc(100vw - 30px); max-height: calc(100dvh - 40px); overflow: hidden; display: grid; grid-template-rows: auto minmax(0,1fr); transform: translate3d(-50%, -50%, 0); isolation: isolate; contain: layout paint; backface-visibility: hidden; background: #151313; border: 1px solid rgba(255,255,255,.11); border-radius: 12px; box-shadow: 0 30px 100px rgba(0,0,0,.7); animation: dialog-in .2s cubic-bezier(.2,.8,.2,1); }
+.dialog-scroll { min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; background: #151313; transform: translateZ(0); backface-visibility: hidden; }
 .dialog-sm { max-width: 510px; }
 .dialog-md { max-width: 680px; }
 .dialog-lg { max-width: 980px; }
-.dialog-header { min-height: 84px; padding: 23px 24px 18px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
+.dialog-header { position: relative; z-index: 1; min-height: 84px; padding: 23px 24px 18px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); background: #151313; }
 .dialog-header h2 { margin: 0 0 6px; font-size: 19px; letter-spacing: -.4px; }
 .dialog-header p { margin: 0; color: #7e7774; font-size: 11px; }
 .icon-button { width: 33px; height: 33px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #35302f; border-radius: 50%; background: #1a1717; color: #8c8582; cursor: pointer; }
@@ -341,14 +342,6 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .selected-source strong { font-size: 12px; }
 .selected-source em { color: #806f6c; font-size: 9px; font-style: normal; }
 .field-caption { color: #8f8784; font-size: 10px; font-weight: 700; letter-spacing: .6px; }
-.generation-kind-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 9px; }
-.generation-kind-switch > button { min-height: 58px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid #302c2b; border-radius: 8px; background: #171414; color: #706966; cursor: pointer; transition: border-color .16s ease, background-color .16s ease, color .16s ease; }
-.generation-kind-switch > button:hover:not(:disabled) { border-color: #5e3333; background: #1e1717; }
-.generation-kind-switch > button.active { border-color: #84383c; background: #261719; color: #d45f64; box-shadow: inset 0 0 0 1px rgba(197,63,68,.1); }
-.generation-kind-switch > button:disabled { cursor: not-allowed; opacity: .58; }
-.generation-kind-switch span { display: grid; gap: 4px; }
-.generation-kind-switch strong { color: #d2cac7; font-size: 10px; }
-.generation-kind-switch small { color: #6f6764; font-size: 8px; font-weight: 500; line-height: 1.4; }
 .generation-lyrics-field > span { display: flex; justify-content: space-between; align-items: center; }
 .generation-lyrics-field > span small { color: #655e5b; font-size: 8px; font-weight: 500; letter-spacing: 0; }
 .generation-lyrics-input { position: relative; }
@@ -423,7 +416,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .loading-state span { display: block; height: 150px; border-radius: 9px; background: linear-gradient(90deg, #131111, #1b1818, #131111); background-size: 200% 100%; animation: loading 1.3s linear infinite; }
 
 @keyframes fade-in { from { opacity: 0 } }
-@keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -48%) scale(.985) } }
+@keyframes dialog-in { from { opacity: 0; transform: translate3d(-50%, -48%, 0) scale(.985) } }
 @keyframes spin { to { transform: rotate(360deg) } }
 @keyframes record-pulse { 50% { box-shadow: 0 0 0 8px rgba(225,71,71,.03); opacity: .72 } }
 @keyframes loading { to { background-position: -200% 0 } }

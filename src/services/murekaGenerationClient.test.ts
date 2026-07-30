@@ -20,6 +20,7 @@ describe('Mureka generation client', () => {
       originalDuration: 10,
       preparedDuration: 30,
       repeatCount: 3,
+      generationKind: 'full-song',
     })
     expect(result.taskId).toBe('task-123')
     expect(result.audioFingerprint).toBe('sha256-generated')
@@ -30,7 +31,7 @@ describe('Mureka generation client', () => {
     expect((form.get('referenceAudio') as Blob).size).toBe(reference.size)
     expect(JSON.parse(String(form.get('metadata')))).toEqual({
       userPrompt: '加入克制鼓组', lyrics: '[主歌]\n夜色缓缓落下', sourceTitle: '暮色回声',
-      originalDuration: 10, preparedDuration: 30, repeatCount: 3,
+      originalDuration: 10, preparedDuration: 30, repeatCount: 3, generationKind: 'full-song',
     })
   })
 
@@ -38,7 +39,7 @@ describe('Mureka generation client', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Invalid reference audio' }), { status: 400 })))
     await expect(generateSongFromReference(new Blob(['audio']), {
       userPrompt: '测试', lyrics: '', sourceTitle: '测试歌曲',
-      originalDuration: 30, preparedDuration: 30, repeatCount: 1,
+      originalDuration: 30, preparedDuration: 30, repeatCount: 1, generationKind: 'instrumental',
     })).rejects.toThrow('Invalid reference audio')
   })
 })

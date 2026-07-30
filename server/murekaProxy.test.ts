@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDeepSeekSummaryRequest, buildLyricsGenerationRequest, buildMurekaGenerationRequest, HUMMING_SUMMARY_PROMPT } from './murekaProxy'
+import { buildDeepSeekSummaryRequest, buildLyricsPromptOptimizationRequest, buildMurekaGenerationRequest, HUMMING_SUMMARY_PROMPT } from './murekaProxy'
 
 describe('DeepSeek audio summary request', () => {
   const murekaResult = { instrument: ['钢琴'], tags: ['relaxed'], description: 'a relaxed humming melody' }
@@ -46,12 +46,19 @@ describe('Mureka song generation request', () => {
   })
 })
 
-describe('Mureka lyrics generation request', () => {
-  it('uses the entered lyrics as the expansion prompt', () => {
-    expect(buildLyricsGenerationRequest('  一个人走在雨夜  ')).toEqual({ prompt: '一个人走在雨夜' })
+describe('DeepSeek lyrics idea optimization request', () => {
+  it('uses the entered idea without requesting complete lyrics', () => {
+    const request = buildLyricsPromptOptimizationRequest('  一个人走在雨夜  ')
+    expect(request.model).toBe('deepseek-chat')
+    expect(request.messages[0].content).toContain('不写完整歌词')
+    expect(request.messages[1].content).toBe('一个人走在雨夜')
   })
 
-  it('rejects an empty lyrics prompt', () => {
-    expect(() => buildLyricsGenerationRequest('   ')).toThrow('请先输入')
+  it('rejects an empty lyrics idea', () => {
+    expect(() => buildLyricsPromptOptimizationRequest('   ')).toThrow('请先输入')
+  })
+
+  it('rejects lyrics ideas longer than 180 characters', () => {
+    expect(() => buildLyricsPromptOptimizationRequest('字'.repeat(181))).toThrow('180')
   })
 })

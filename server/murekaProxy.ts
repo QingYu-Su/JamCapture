@@ -103,6 +103,12 @@ const GENERATION_SYSTEM_PROMPT = `你是专业编曲延展助手，基于用户�
 
 const GENERATION_LYRICS = 'instrumental'
 const GENERATION_MODEL = 'mureka-8'
+const LYRICS_IDEA_OPTIMIZATION_PROMPT = `你是专业歌词创作构思编辑。请把用户输入的简短歌词想法优化成一段清晰、具体、可直接用于后续歌曲生成的中文歌词构思提示。
+要求：
+1. 保留用户原本的主题、人物视角和核心情绪，不改变创作意图。
+2. 可补充场景、叙事推进、意象方向、情绪转折、主歌与副歌的表达重点。
+3. 只输出优化后的歌词构思提示，不写完整歌词，不创作可直接演唱的逐行歌词，不使用 Markdown、标题或解释。
+4. 控制在 60-180 个汉字；语言自然，避免空泛套话和堆砌形容词。`
 
 function unquote(value: string) {
   return value.trim().replace(/^['"]|['"]$/g, '')
@@ -169,7 +175,11 @@ function parseDeepSeekContent(content: string): DeepSeekSummary {
 
 function parseHummingContent(content: string, existingHummingCount?: number) {
   const field = (name: string) => content.match(new RegExp(`^${name}[：:]\\s*(.+)$`, 'mi'))?.[1]?.trim() ?? ''
-  let emotion = stringList(field('emotion'), 4)
+  let emotion = field('emotion')
+    .split(/[,，、/|;；\n]+/)
+    .map((value) => value.trim().replace(/^[\s"'“”‘’()[\]（）【】*-]+|[\s"'“”‘’()[\]（）【】*-]+$/g, ''))
+    .filter((value, index, values) => isChineseText(value) && values.indexOf(value) === index)
+    .slice(0, 4)
   if (emotion.length < 2) emotion = ['松弛', '随性']
   return {
     title: Number.isInteger(existingHummingCount) && existingHummingCount! >= 0 ? `哼唱灵感${existingHummingCount! + 1}` : '哼唱灵感',
@@ -420,40 +430,49 @@ async function providerJson(response: Response, label: string) {
   return payload
 }
 
-export function buildLyricsGenerationRequest(lyricsPrompt: string) {
+export function buildLyricsPromptOptimizationRequest(lyricsPrompt: string) {
   const prompt = lyricsPrompt.trim()
-  if (!prompt) throw new Error('请先输入需要扩写的歌词内容')
-  if (prompt.length > 5000) throw new Error('歌词提示不能超过 5000 个字符')
-  return { prompt }
+  if (!prompt) throw new Error('请先输入歌词内容构思')
+  if (Array.from(prompt).length > 180) throw new Error('歌词内容构思不能超过 180 个字')
+  return {
+    model: 'deepseek-chat',
+    temperature: 0.4,
+    messages: [
+      { role: 'system', content: LYRICS_IDEA_OPTIMIZATION_PROMPT },
+      { role: 'user', content: prompt },
+    ],
+  }
 }
 
-function createLyricsGenerationHandler(root: string) {
+function createLyricsPromptOptimizationHandler(root: string) {
   return async (request: IncomingMessage, response: ServerResponse) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'Method not allowed' })
     try {
       const payload = JSON.parse(await readRequestBody(request)) as { prompt?: unknown }
-      const requestBody = buildLyricsGenerationRequest(stringValue(payload.prompt))
+      const requestBody = buildLyricsPromptOptimizationRequest(stringValue(payload.prompt))
       const keys = await readApiKeys(root)
-      if (!keys.generation) throw new Error('请先在 config.yaml 中配置 mureka_generation_api_key')
-      const upstream = await fetchWithTimeout(`${keys.generationBaseUrl}/v1/lyrics/generate`, {
+      if (!keys.deepseek) throw new Error('请先在 config.yaml 中配置 deepseek_api_key')
+      const upstream = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${keys.generation}`,
+          Authorization: `Bearer ${keys.deepseek}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
         body: JSON.stringify(requestBody),
       })
-      const generated = await providerJson(upstream, 'Mureka 歌词生成')
-      const nestedResult = generated.result && typeof generated.result === 'object'
-        ? generated.result as Record<string, unknown>
-        : {}
-      const lyrics = stringValue(generated.lyrics) || stringValue(nestedResult.lyrics)
-      if (!lyrics) throw new Error('歌词生成成功，但响应中没有 lyrics')
-      if (lyrics.length > 5000) throw new Error('生成的完整歌词超过 5000 个字符限制')
-      return sendJson(response, 200, { lyrics })
+      const generated = await providerJson(upstream, 'DeepSeek 歌词构思优化')
+      const choices = Array.isArray(generated.choices) ? generated.choices : []
+      const choice = choices[0] && typeof choices[0] === 'object' ? choices[0] as Record<string, unknown> : {}
+      const message = choice.message && typeof choice.message === 'object' ? choice.message as Record<string, unknown> : {}
+      const optimizedPrompt = Array.from(stringValue(message.content)
+        .replace(/^```(?:text)?\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim()).slice(0, 180).join('')
+      if (!optimizedPrompt) throw new Error('DeepSeek 没有返回可用的歌词构思')
+      return sendJson(response, 200, { optimizedPrompt })
     } catch (error) {
-      return sendJson(response, 500, { error: error instanceof Error ? error.message : '歌词扩写失败' })
+      return sendJson(response, 500, { error: error instanceof Error ? error.message : '歌词构思优化失败' })
     }
   }
 }
@@ -467,14 +486,17 @@ async function generationForm(request: IncomingMessage) {
   const rawMetadata = form.get('metadata')
   if (!(referenceAudio instanceof Blob) || typeof rawMetadata !== 'string') throw new Error('缺少参考歌曲或生成参数')
   const parsed = JSON.parse(rawMetadata) as Record<string, unknown>
+  const userPrompt = stringValue(parsed.userPrompt)
+  if (Array.from(userPrompt).length > 180) throw new Error('创作风格与演绎要求不能超过 180 个字')
   const lyrics = stringValue(parsed.lyrics) || GENERATION_LYRICS
-  if (lyrics.length > 5000) throw new Error('歌词不能超过 5000 个字符')
+  if (Array.from(lyrics).length > 180) throw new Error('歌词内容构思不能超过 180 个字')
   return {
     referenceAudio: Buffer.from(await referenceAudio.arrayBuffer()),
     referenceMimeType: referenceAudio.type || 'audio/mpeg',
     metadata: {
-      userPrompt: stringValue(parsed.userPrompt).slice(0, 500),
+      userPrompt,
       lyrics,
+      generationKind: parsed.generationKind === 'full-song' ? 'full-song' as const : 'instrumental' as const,
       sourceTitle: stringValue(parsed.sourceTitle).slice(0, 120),
       originalDuration: Number(parsed.originalDuration) || 0,
       preparedDuration: Number(parsed.preparedDuration) || 0,
@@ -626,12 +648,54 @@ async function recognizeGeneratedLyrics(
   return timestampedLyricsFromRecognition(recognition)
 }
 
+function createLyricsRecognitionHandler(root: string) {
+  return async (request: IncomingMessage, response: ServerResponse) => {
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'Method not allowed' })
+    try {
+      const audio = await readRequestBuffer(request, MAX_GENERATED_AUDIO_BYTES)
+      if (!audio.length) return sendJson(response, 400, { error: '缺少需要识别的歌曲音频' })
+      const keys = await readApiKeys(root)
+      if (!keys.generation) throw new Error('请先在 config.yaml 中配置 mureka_generation_api_key')
+      const authorization = { Authorization: 'Bearer ' + keys.generation }
+      const uploadForm = new FormData()
+      uploadForm.append('purpose', 'audio')
+      uploadForm.append(
+        'file',
+        new Blob([new Uint8Array(audio)], { type: String(request.headers['content-type'] || 'audio/mpeg').split(';')[0] }),
+        'jamcapture-generated-audio.mp3',
+      )
+      const uploadResponse = await fetchWithTimeout(keys.generationBaseUrl + '/v1/files/upload', {
+        method: 'POST',
+        headers: authorization,
+        body: uploadForm,
+      })
+      const upload = await providerJson(uploadResponse, 'Mureka 本地歌曲识别上传')
+      const uploadAudioId = identifierValue(upload.id)
+      if (!uploadAudioId) throw new Error('歌曲上传成功，但没有返回 audio ID')
+      const recognitionResponse = await fetchWithTimeout(keys.generationBaseUrl + '/v1/song/recognize', {
+        method: 'POST',
+        headers: { ...authorization, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ upload_audio_id: uploadAudioId }),
+      })
+      const recognition = await providerJson(recognitionResponse, 'Mureka 时间戳歌词识别')
+      const timedLyrics = timestampedLyricsFromRecognition(recognition)
+      return sendJson(response, 200, {
+        timedLyrics,
+        lyrics: timedLyrics.map((line) => line.text).join('\n'),
+      })
+    } catch (error) {
+      return sendJson(response, 500, { error: error instanceof Error ? error.message : '歌词识别失败' })
+    }
+  }
+}
+
 export function buildMurekaGenerationRequest(referenceId: string, userPrompt: string, lyrics = GENERATION_LYRICS) {
   const fallbackUserPrompt = '请在保真规则内自然延展为完整作品。'
+  if (Array.from(userPrompt.trim()).length > 180) throw new Error('创作风格与演绎要求不能超过 180 个字')
   const combinedPrompt = `${GENERATION_SYSTEM_PROMPT}\n\n【用户自定义Prompt】\n${userPrompt.trim() || fallbackUserPrompt}`
   if (combinedPrompt.length > 2000) throw new Error('系统 Prompt 与用户 Prompt 拼接后超过 2000 字符限制')
   const normalizedLyrics = lyrics.trim() || GENERATION_LYRICS
-  if (normalizedLyrics.length > 5000) throw new Error('歌词不能超过 5000 个字符')
+  if (Array.from(normalizedLyrics).length > 180) throw new Error('歌词内容构思不能超过 180 个字')
   return {
     model: GENERATION_MODEL,
     n: 1,
@@ -731,7 +795,7 @@ function createGenerationHandler(root: string) {
       const generated = generationResultAudio(result)
       if (!generated.url) throw new Error('歌曲生成成功，但响应中没有音频 URL')
       let timedLyrics: ReturnType<typeof timestampedLyricsFromRecognition> = []
-      if (metadata.lyrics.toLowerCase() !== GENERATION_LYRICS) {
+      if (metadata.generationKind === 'full-song' || metadata.lyrics.toLowerCase() !== GENERATION_LYRICS) {
         try {
           timedLyrics = await recognizeGeneratedLyrics(generated.url, keys.generationBaseUrl, authorization)
         } catch (recognitionError) {
@@ -754,6 +818,9 @@ function createGenerationHandler(root: string) {
         audioMimeType: audio.audioMimeType,
         audioFingerprint: audio.audioFingerprint,
         timedLyrics,
+        lyrics: metadata.lyrics.toLowerCase() !== GENERATION_LYRICS
+          ? metadata.lyrics
+          : timedLyrics.map((line) => line.text).join('\n') || undefined,
       })
     } catch (error) {
       return sendJson(response, 500, { error: error instanceof Error ? error.message : '歌曲生成请求失败' })
@@ -840,8 +907,9 @@ export function murekaProxy(): Plugin {
       next()
     })
     server.middlewares.use('/api/song/describe', createHandler(projectRoot))
-    server.middlewares.use('/api/lyrics/generate', createLyricsGenerationHandler(projectRoot))
+    server.middlewares.use('/api/lyrics/optimize', createLyricsPromptOptimizationHandler(projectRoot))
     server.middlewares.use('/api/song/generate', createGenerationHandler(projectRoot))
+    server.middlewares.use('/api/song/recognize-lyrics', createLyricsRecognitionHandler(projectRoot))
     server.middlewares.use('/api/shares', createShareHandler(projectRoot))
   }
   return {

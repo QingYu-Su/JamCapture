@@ -4,9 +4,11 @@ import type { GeneratedTrack, GenerationRequest, InspirationTrack } from '../typ
 import { AUDIO_WAVEFORM_VERSION, analyzeAudioBlob, prepareReferenceAudioBlob } from '../utils/audio'
 import { AI_ANALYSIS_VERSION, completedAnalysis, describeAudio } from '../services/murekaClient'
 import { generateSongFromReference } from '../services/murekaGenerationClient'
+import { recognizeLyricsFromAudio } from '../services/murekaRecognitionClient'
 
 const waveformAnalysisJobs = new Map<string, Promise<InspirationTrack | null>>()
 const aiAnalysisJobs = new Map<string, Promise<InspirationTrack>>()
+const generatedLyricsJobs = new Map<string, Promise<GeneratedTrack>>()
 let aiRequestQueue: Promise<unknown> = Promise.resolve()
 
 function enqueueAIRequest<T>(request: () => Promise<T>) {
@@ -53,6 +55,7 @@ interface LibraryContextValue {
   updateInspiration: (track: InspirationTrack) => Promise<void>
   deleteInspiration: (track: InspirationTrack) => Promise<void>
   generateDemo: (request: GenerationRequest) => Promise<GeneratedTrack>
+  ensureGeneratedLyrics: (track: GeneratedTrack) => Promise<GeneratedTrack>
   analyzeInspiration: (track: InspirationTrack, options?: { forceRefresh?: boolean }) => Promise<void>
   getBlob: (id: string) => Promise<Blob | undefined>
 }
@@ -191,6 +194,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           || track.aiAnalysis.error?.includes('deepseek_api_key')
           || track.aiAnalysis.error?.includes('当前录音为 WebM')
           || track.aiAnalysis.error?.includes('Mureka 仅支持 MP3/M4A')
+          || track.aiAnalysis.error?.includes('不符合哼唱标签格式')
         ))
       if (!shouldStart || automaticallyStarted.current.has(track.id)) continue
       automaticallyStarted.current.add(track.id)
@@ -216,6 +220,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       originalDuration: prepared.originalDuration,
       preparedDuration: prepared.preparedDuration,
       repeatCount: prepared.repeatCount,
+      generationKind: request.generationKind,
     })
     const audioAnalysis = await analyzeAudioBlob(result.audio)
     // The local ID owns the IndexedDB record; provider task IDs are retained only for diagnostics.
@@ -233,8 +238,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       mode: 'full',
       generationKind: request.generationKind,
       prompt: request.prompt,
-      lyrics: request.lyrics || undefined,
+      lyrics: result.lyrics || request.lyrics || undefined,
       timedLyrics: result.timedLyrics,
+      lyricsRecognitionAttemptedAt: result.timedLyrics.length ? new Date().toISOString() : undefined,
       style: request.style || source.tags.style || 'Alternative',
       status: 'complete',
       createdAt: new Date().toISOString(),
@@ -245,10 +251,35 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     return track
   }, [inspirations])
 
+  const ensureGeneratedLyrics = useCallback(async (track: GeneratedTrack) => {
+    if (track.generationKind !== 'full-song' || track.timedLyrics?.length || track.lyricsRecognitionAttemptedAt) return track
+    const existing = generatedLyricsJobs.get(track.id)
+    if (existing) return existing
+    const job = (async () => {
+      const blob = track.audioSource.type === 'blob' ? await repository.getAudioBlob(track.audioSource.blobId) : undefined
+      if (!blob) return track
+      const recognized = await recognizeLyricsFromAudio(blob)
+      const updated: GeneratedTrack = {
+        ...track,
+        lyrics: track.lyrics || recognized.lyrics || undefined,
+        timedLyrics: recognized.timedLyrics,
+        lyricsRecognitionAttemptedAt: new Date().toISOString(),
+      }
+      await repository.saveGenerated(updated)
+      setGenerated((items) => items.map((item) => item.id === updated.id ? updated : item))
+      return updated
+    })().catch((error) => {
+      console.warn('[JamCapture] Existing generated lyrics recognition failed', error)
+      return track
+    }).finally(() => generatedLyricsJobs.delete(track.id))
+    generatedLyricsJobs.set(track.id, job)
+    return job
+  }, [])
+
   const value = useMemo(() => ({
     inspirations, generated, loading, saveInspiration, updateInspiration,
-    deleteInspiration, generateDemo, analyzeInspiration, getBlob: repository.getAudioBlob,
-  }), [analyzeInspiration, deleteInspiration, generateDemo, generated, inspirations, loading, saveInspiration, updateInspiration])
+    deleteInspiration, generateDemo, ensureGeneratedLyrics, analyzeInspiration, getBlob: repository.getAudioBlob,
+  }), [analyzeInspiration, deleteInspiration, ensureGeneratedLyrics, generateDemo, generated, inspirations, loading, saveInspiration, updateInspiration])
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>
 }

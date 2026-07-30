@@ -21,7 +21,7 @@ export function Modal({ open, onOpenChange, title, description, children, size =
             <div><Dialog.Title>{title}</Dialog.Title>{description && <Dialog.Description>{description}</Dialog.Description>}</div>
             <Dialog.Close className="icon-button" aria-label="关闭"><X size={18} /></Dialog.Close>
           </div>
-          {children}
+          <div className="dialog-scroll">{children}</div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

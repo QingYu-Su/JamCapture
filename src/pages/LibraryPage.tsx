@@ -22,6 +22,8 @@ export function LibraryPage() {
   const [recordingTypeOpen, setRecordingTypeOpen] = useState(false)
   const [recordingType, setRecordingType] = useState<RecordingType>('instrument')
   const [recordingOpen, setRecordingOpen] = useState(false)
+  const [uploadTypeOpen, setUploadTypeOpen] = useState(false)
+  const [uploadType, setUploadType] = useState<RecordingType>('instrument')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const uploadInputRef = useRef<HTMLInputElement>(null)
@@ -40,7 +42,7 @@ export function LibraryPage() {
     return () => window.removeEventListener('keydown', focusSearch)
   }, [])
 
-  async function uploadAudio(file: File) {
+  async function uploadAudio(file: File, recordingType: RecordingType) {
     setUploadError('')
     if (!file.type.startsWith('audio/') && !/\.(mp3|m4a|mp4|wav|webm|aac|ogg|flac)$/i.test(file.name)) {
       setUploadError('请选择有效的音频文件')
@@ -67,6 +69,7 @@ export function LibraryPage() {
         tags: { style: '', instrument: '', mood: '', bpm: '' },
         recordedAt: new Date().toISOString(),
         duration: analysis.duration,
+        recordingType,
       }
       await saveInspiration(track, file)
     } catch (error) {
@@ -98,10 +101,10 @@ export function LibraryPage() {
           onChange={(event) => {
             const file = event.currentTarget.files?.[0]
             event.currentTarget.value = ''
-            if (file) void uploadAudio(file)
+            if (file) void uploadAudio(file, uploadType)
           }}
         />
-        <button className="upload-fab" disabled={uploading} onClick={() => uploadInputRef.current?.click()} aria-label="上传音频">
+        <button className="upload-fab" disabled={uploading} onClick={() => setUploadTypeOpen(true)} aria-label="上传音频">
           <span className="upload-ring">{uploading ? <LoaderCircle className="spin" size={21} /> : <Upload size={21} />}</span>
           <span>{uploading ? '正在读取' : '上传音频'}</span>
         </button>
@@ -114,6 +117,16 @@ export function LibraryPage() {
           setRecordingType(type)
           setRecordingTypeOpen(false)
           setRecordingOpen(true)
+        }}
+      />
+      <RecordingTypeModal
+        action="upload"
+        open={uploadTypeOpen}
+        onClose={() => setUploadTypeOpen(false)}
+        onSelect={(type) => {
+          setUploadType(type)
+          setUploadTypeOpen(false)
+          uploadInputRef.current?.click()
         }}
       />
       <RecordingModal recordingType={recordingType} open={recordingOpen} onClose={() => setRecordingOpen(false)} onSave={saveInspiration} />

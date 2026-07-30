@@ -45,11 +45,18 @@ export function validateMusicSummary(result: MusicSummary) {
 }
 
 export function validateHummingSummary(result: MusicSummary) {
-  const valid = /^哼唱灵感\d*$/u.test(result.title)
-    && result.instrument.length === 1 && result.instrument[0] === '人声哼唱'
-    && result.emotion.length >= 2 && result.emotion.length <= 4 && result.emotion.every(isChineseText)
-  if (!valid) throw new Error('AI 返回内容不符合哼唱标签格式，请点击重新分析')
-  return result
+  let emotion = result.emotion
+    .flatMap((value) => value.split(/[,，、/|;；\n]+/))
+    .map((value) => value.trim().replace(/^[\s"'“”‘’()[\]（）【】*-]+|[\s"'“”‘’()[\]（）【】*-]+$/g, ''))
+    .filter((value, index, values) => isChineseText(value) && values.indexOf(value) === index)
+    .slice(0, 4)
+  if (emotion.length < 2) emotion = ['松弛', '随性']
+  return {
+    ...result,
+    title: /^哼唱灵感\d*$/u.test(result.title) ? result.title : '哼唱灵感',
+    instrument: ['人声哼唱'],
+    emotion,
+  }
 }
 
 function errorMessage(error: unknown, fallback: string) {

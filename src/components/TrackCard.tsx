@@ -81,7 +81,7 @@ export function TrackCard({ track, onEdit, onExtend, onRetryAnalysis, onShare }:
           </div>
         )}
         {track.aiAnalysis?.status === 'complete' && track.aiAnalysis.description?.trim() && <p className="ai-description">{track.aiAnalysis.description}</p>}
-        {track.aiAnalysis?.status === 'failed' && (
+        {track.aiAnalysis?.status === 'failed' && !track.aiAnalysis.error?.includes('不符合') && (
           <div className="ai-analysis-failed"><AlertCircle size={14} /><span>{track.aiAnalysis.error}</span></div>
         )}
         <div className="track-meta"><span>{formatDate(track.recordedAt)}</span><i /><span>{formatDuration(track.duration)}</span></div>

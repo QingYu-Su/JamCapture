@@ -19,7 +19,7 @@ interface PlayerContextValue {
 const PlayerContext = createContext<PlayerContextValue | null>(null)
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
-  const { getBlob } = useLibrary()
+  const { getBlob, generated, ensureGeneratedLyrics } = useLibrary()
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const [current, setCurrent] = useState<PlayableTrack | null>(null)
@@ -52,6 +52,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
     }
   }, []) // A single audio element prevents competing playback across routes.
+
+  useEffect(() => {
+    if (current?.kind !== 'generated') return
+    const latest = generated.find((track) => track.id === current.id)
+    if (latest && latest !== current) setCurrent(latest)
+  }, [current, generated])
+
+  useEffect(() => {
+    if (current?.kind !== 'generated'
+      || current.generationKind !== 'full-song'
+      || current.timedLyrics?.length
+      || current.lyricsRecognitionAttemptedAt) return
+    void ensureGeneratedLyrics(current)
+  }, [current, ensureGeneratedLyrics])
 
   const play = useCallback(async (track: PlayableTrack) => {
     const audio = audioRef.current

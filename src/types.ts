@@ -72,6 +72,7 @@ export interface GeneratedTrack {
   prompt: string
   lyrics?: string
   timedLyrics?: TimedLyricLine[]
+  lyricsRecognitionAttemptedAt?: string
   style: string
   status: GenerationStatus
   createdAt: string

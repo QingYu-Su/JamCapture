@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { describeAudio, normalizeMurekaAudioUrl } from './murekaClient'
+import { describeAudio, normalizeMurekaAudioUrl, validateHummingSummary } from './murekaClient'
 
 const convertAudioBlobToMp3 = vi.hoisted(() => vi.fn())
 vi.mock('../utils/audio', () => ({ convertAudioBlobToMp3 }))
@@ -60,6 +60,20 @@ describe('Mureka describe client', () => {
     const request = fetchMock.mock.calls[0][1] as RequestInit
     expect(JSON.parse(String(request.body))).toMatchObject({ recordingType: 'vocal', existingHummingCount: 5 })
     expect(result).toMatchObject({ title: '哼唱灵感6', instrument: ['人声哼唱'], emotion: ['松弛', '随性'] })
+  })
+
+  it('normalizes malformed humming fields instead of surfacing a format error', () => {
+    expect(validateHummingSummary({
+      title: '雨夜哼唱',
+      instrument: ['钢琴'],
+      toneColor: [], genres: [], key: '',
+      emotion: ['轻松 / relaxed', '（随性）', '温暖'],
+      bpm: '', description: '', promptSuggestions: [],
+    })).toMatchObject({
+      title: '哼唱灵感',
+      instrument: ['人声哼唱'],
+      emotion: ['轻松', '随性', '温暖'],
+    })
   })
 
   it('surfaces configuration errors returned by the local proxy', async () => {
