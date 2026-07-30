@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { buildLyricsGenerationRequest, buildMurekaGenerationRequest, timestampedLyricsFromRecognition } from './murekaProxy'
+import { buildDeepSeekSummaryRequest, buildLyricsGenerationRequest, buildMurekaGenerationRequest, HUMMING_SUMMARY_PROMPT } from './murekaProxy'
+
+describe('DeepSeek audio summary request', () => {
+  const murekaResult = { instrument: ['钢琴'], tags: ['relaxed'], description: 'a relaxed humming melody' }
+
+  it('keeps the original JSON prompt for instrument recordings', () => {
+    const request = buildDeepSeekSummaryRequest(murekaResult, 'instrument')
+    expect(request).toHaveProperty('response_format', { type: 'json_object' })
+    expect(request.messages[0].content).toContain('只输出一个 JSON 对象')
+    expect(request.messages[0].content).not.toBe(HUMMING_SUMMARY_PROMPT)
+  })
+
+  it('uses the dedicated humming prompt and backend-computed title number', () => {
+    const request = buildDeepSeekSummaryRequest(murekaResult, 'vocal', 5)
+    expect(request).not.toHaveProperty('response_format')
+    expect(request.messages[0].content).toBe(HUMMING_SUMMARY_PROMPT)
+    expect(request.messages[1].content).toContain('素材属性：哼唱')
+    expect(request.messages[1].content).toContain('当前用户已有哼唱存量总数：5')
+    expect(request.messages[1].content).toContain('后端计算后的标题编号：6')
+  })
+})
 
 describe('Mureka song generation request', () => {
   it('combines the fixed system prompt, modal prompt, fixed lyrics and uploaded song reference', () => {
@@ -33,36 +53,5 @@ describe('Mureka lyrics generation request', () => {
 
   it('rejects an empty lyrics prompt', () => {
     expect(() => buildLyricsGenerationRequest('   ')).toThrow('请先输入')
-  })
-
-  it('normalizes millisecond recognition segments into a sorted lyric timeline', () => {
-    expect(timestampedLyricsFromRecognition({
-      result: {
-        segments: [
-          { start_time: 6400, end_time: 9800, text: '第二句歌词' },
-          { start_time: 1200, end_time: 6200, text: '第一句歌词' },
-        ],
-      },
-    })).toEqual([
-      { startTime: 1.2, endTime: 6.2, text: '第一句歌词' },
-      { startTime: 6.4, endTime: 9.8, text: '第二句歌词' },
-    ])
-  })
-
-  it('parses the documented Mureka lyrics_sections line timestamps', () => {
-    expect(timestampedLyricsFromRecognition({
-      lyrics_sections: [{
-        section_type: 'verse',
-        start: 1000,
-        end: 12000,
-        lines: [
-          { start: 6400, end: 9800, text: '第二句歌词' },
-          { start: 1200, end: 6200, text: '第一句歌词' },
-        ],
-      }],
-    })).toEqual([
-      { startTime: 1.2, endTime: 6.2, text: '第一句歌词' },
-      { startTime: 6.4, endTime: 9.8, text: '第二句歌词' },
-    ])
   })
 })

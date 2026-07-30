@@ -308,6 +308,14 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .delete-confirm button { padding: 7px 10px; border: 0; background: transparent; font-size: 10px; cursor: pointer; }
 .delete-confirm .danger-button { border-radius: 999px; background: #742a2a; }
 
+.recording-type-panel { padding: 22px 24px 25px; display: grid; gap: 11px; }
+.recording-type-option { width: 100%; min-height: 82px; padding: 15px 17px; display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 15px; text-align: left; border: 1px solid #332d2c; border-radius: 9px; background: #191616; cursor: pointer; transition: border-color .16s ease, background-color .16s ease, transform .16s ease; }
+.recording-type-option:hover { border-color: #753438; background: #211718; transform: translateY(-1px); }
+.recording-type-icon { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #5c292c; border-radius: 50%; background: #2a1718; color: #d65a60; }
+.recording-type-option > span:last-child { min-width: 0; display: grid; gap: 6px; }
+.recording-type-option strong { color: #eee8e5; font-size: 13px; }
+.recording-type-option small { color: #776f6c; font-size: 9px; line-height: 1.5; }
+
 .record-panel { min-height: 345px; padding: 27px 28px 29px; text-align: center; }
 .record-status { display: flex; justify-content: center; align-items: center; gap: 8px; color: #9a918e; font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
 .record-dot { width: 7px; height: 7px; border-radius: 50%; background: #e14747; box-shadow: 0 0 0 5px rgba(225,71,71,.09); animation: record-pulse 1.3s ease-in-out infinite; }
@@ -526,7 +534,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .shared-volume { display: none; }
   .field-grid { grid-template-columns: 1fr; }
   .dialog-header { padding-inline: 18px; }
-  .form-stack, .record-panel, .generation-settings { padding-inline: 18px; }
+  .form-stack, .recording-type-panel, .record-panel, .generation-settings { padding-inline: 18px; }
   .danger-split { align-items: flex-end; flex-direction: column-reverse; }
   .primary-button { width: 100%; }
   .record-time { font-size: 42px; }

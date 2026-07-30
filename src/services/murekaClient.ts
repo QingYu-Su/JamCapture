@@ -1,4 +1,4 @@
-import type { AIPromptSuggestion, AudioAIAnalysis } from '../types'
+import type { AIPromptSuggestion, AudioAIAnalysis, RecordingType } from '../types'
 import { convertAudioBlobToMp3 } from '../utils/audio'
 
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024
@@ -44,6 +44,14 @@ export function validateMusicSummary(result: MusicSummary) {
   return result
 }
 
+export function validateHummingSummary(result: MusicSummary) {
+  const valid = /^哼唱灵感\d*$/u.test(result.title)
+    && result.instrument.length === 1 && result.instrument[0] === '人声哼唱'
+    && result.emotion.length >= 2 && result.emotion.length <= 4 && result.emotion.every(isChineseText)
+  if (!valid) throw new Error('AI 返回内容不符合哼唱标签格式，请点击重新分析')
+  return result
+}
+
 function errorMessage(error: unknown, fallback: string) {
   if (typeof error === 'string') return error
   if (error && typeof error === 'object') {
@@ -86,7 +94,7 @@ function blobTypeFromDataUrl(header: string) {
   return header.match(/^data:([^;]+)/)?.[1] ?? 'unknown'
 }
 
-export async function describeAudio(blob: Blob, options: { forceRefresh?: boolean } = {}): Promise<MusicSummary> {
+export async function describeAudio(blob: Blob, options: { forceRefresh?: boolean; recordingType?: RecordingType; existingHummingCount?: number } = {}): Promise<MusicSummary> {
   const compatibleBlob = /audio\/webm/i.test(blob.type) ? await convertAudioBlobToMp3(blob) : blob
   if (compatibleBlob.size > MAX_AUDIO_BYTES) throw new Error('转换后的音频超过 Mureka 允许的 10MB 上限')
   const dataUrl = normalizeMurekaAudioUrl(await blobToDataUrl(compatibleBlob))
@@ -94,7 +102,12 @@ export async function describeAudio(blob: Blob, options: { forceRefresh?: boolea
   const response = await fetch('/api/song/describe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: dataUrl, forceRefresh: Boolean(options.forceRefresh) }),
+    body: JSON.stringify({
+      url: dataUrl,
+      forceRefresh: Boolean(options.forceRefresh),
+      recordingType: options.recordingType,
+      existingHummingCount: options.existingHummingCount,
+    }),
   })
   const payload = await response.json().catch(() => ({})) as {
     error?: unknown
@@ -112,7 +125,7 @@ export async function describeAudio(blob: Blob, options: { forceRefresh?: boolea
   if (!response.ok) throw new Error(errorMessage(payload.error, `AI 音频分析失败（${response.status}）`))
 
   const result = payload.result ?? payload
-  return validateMusicSummary({
+  const summary = {
     title: result.title ?? '',
     instrument: result.instrument ?? [],
     toneColor: result.toneColor ?? [],
@@ -122,7 +135,8 @@ export async function describeAudio(blob: Blob, options: { forceRefresh?: boolea
     bpm: result.bpm ?? '',
     description: result.description ?? '',
     promptSuggestions: result.promptSuggestions ?? [],
-  })
+  }
+  return options.recordingType === 'vocal' ? validateHummingSummary(summary) : validateMusicSummary(summary)
 }
 
 export function completedAnalysis(result: MusicSummary): AudioAIAnalysis {

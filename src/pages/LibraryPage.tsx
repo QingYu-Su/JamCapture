@@ -4,11 +4,12 @@ import { EditTrackModal } from '../components/EditTrackModal'
 import { FilterBar } from '../components/FilterBar'
 import { GenerationModal } from '../components/GenerationModal'
 import { RecordingModal } from '../components/RecordingModal'
+import { RecordingTypeModal } from '../components/RecordingTypeModal'
 import { ShareTrackModal } from '../components/ShareTrackModal'
 import { TrackCard } from '../components/TrackCard'
 import { useLibrary } from '../context/LibraryContext'
 import { usePlayer } from '../context/PlayerContext'
-import type { InspirationTrack, TrackFilters } from '../types'
+import type { InspirationTrack, RecordingType, TrackFilters } from '../types'
 import { AUDIO_WAVEFORM_VERSION, analyzeAudioBlob } from '../utils/audio'
 import { filterTracks } from '../utils/tracks'
 
@@ -18,6 +19,8 @@ export function LibraryPage() {
   const { inspirations, loading, saveInspiration, updateInspiration, deleteInspiration, analyzeInspiration, getBlob } = useLibrary()
   const { stopIfTrack } = usePlayer()
   const [filters, setFilters] = useState(initialFilters)
+  const [recordingTypeOpen, setRecordingTypeOpen] = useState(false)
+  const [recordingType, setRecordingType] = useState<RecordingType>('instrument')
   const [recordingOpen, setRecordingOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -102,9 +105,18 @@ export function LibraryPage() {
           <span className="upload-ring">{uploading ? <LoaderCircle className="spin" size={21} /> : <Upload size={21} />}</span>
           <span>{uploading ? '正在读取' : '上传音频'}</span>
         </button>
-        <button className="record-fab" onClick={() => setRecordingOpen(true)} aria-label="开始录制"><span className="fab-ring"><Mic size={25} /></span><span>开始录制</span></button>
+        <button className="record-fab" onClick={() => setRecordingTypeOpen(true)} aria-label="开始录制"><span className="fab-ring"><Mic size={25} /></span><span>开始录制</span></button>
       </div>
-      <RecordingModal open={recordingOpen} onClose={() => setRecordingOpen(false)} onSave={saveInspiration} />
+      <RecordingTypeModal
+        open={recordingTypeOpen}
+        onClose={() => setRecordingTypeOpen(false)}
+        onSelect={(type) => {
+          setRecordingType(type)
+          setRecordingTypeOpen(false)
+          setRecordingOpen(true)
+        }}
+      />
+      <RecordingModal recordingType={recordingType} open={recordingOpen} onClose={() => setRecordingOpen(false)} onSave={saveInspiration} />
       <EditTrackModal track={editingTrack} onClose={() => setEditingTrack(null)} onSave={async (track) => { await updateInspiration(track); setEditingTrack(null) }} onDelete={async (track) => { stopIfTrack(track.id); await deleteInspiration(track); setEditingTrack(null) }} />
       <GenerationModal open={generationTracks.length > 0} tracks={generationTracks} onClose={() => setGenerationTracks([])} />
       <ShareTrackModal track={sharingTrack} getBlob={getBlob} onClose={() => setSharingTrack(null)} />

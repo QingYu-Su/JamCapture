@@ -76,6 +76,23 @@ JSON 字段与规则：
 严格输出示例：
 {"title":"暮色缓缓沉落","instrument":"电吉他","tone_color":["温暖","朦胧"],"genres":"摇滚","key":"Am","emotion":["克制","忧郁"],"bpm":"78","description":"温暖朦胧的旋律在暮色中缓慢铺展开来","prompt_suggestions":[{"title":"暮色渐进","text":"保留克制旋律与温暖音色，逐步加入鼓组和低频，发展为层次完整的暮色摇滚作品"},{"title":"朦胧回响","text":"围绕忧郁情绪扩展空间感和声，在中段形成动态高潮，最后回落至安静余韵"},{"title":"夜路律动","text":"延续原有节奏动机，加入稳定贝斯与细腻鼓点，构建适合夜间行驶的完整编曲"}]}`
 
+export const HUMMING_SUMMARY_PROMPT = `任务：接收后端给到的原始文本信息，规整出固定三类内容：乐器标签、情绪标签、标准化标题，全程依托后端给出内容，禁止自行脑补音频信息、不准额外创造内容。
+1.乐器标签规则
+只要本条素材属性为哼唱，乐器统一固定为：人声哼唱。无视后端附带的其他乐器相关文字，不修改、不替换成吉他、钢琴、键盘等其他乐器名。若非哼唱素材则正常沿用后端乐器信息。
+2.情绪标签规整规则
+筛选后端所有文字里的情绪类词汇，最终保留2-4个有效情绪词，中文顿号分隔。剔除曲风、乐器、速度、乐理、场景类无关词语。
+有效词不足2个，兜底固定为：松弛、随性；词汇多于4个，优先保留辨识度最高的核心情绪，删减次要词汇，严格控制数量区间。禁止出现专业音乐术语、风格词。
+3.标题规整规则
+标题格式强制为：哼唱灵感+阿拉伯数字编号。后端会同步传入当前用户已有哼唱存量总数，最终编号=存量数字+1，例：已有5条，则标题为哼唱灵感6。
+AI不计算数字，仅拼接文字；后端未给到存量数字，只输出“哼唱灵感”，编号交由后端补全。严禁给标题添加情绪、风景、曲风、符号、英文等额外修饰。
+
+输出必须严格按照分行格式，无多余注释、闲聊、拓展文字：
+instrument：整理结果
+emotion：筛选后的情绪词
+title：最终标题
+
+硬性禁止：私自新增情绪词、篡改哼唱乐器名称、标题加额外文字、情绪数量超出2-4区间、混入无关专业词汇。`
+
 const GENERATION_SYSTEM_PROMPT = `你是专业编曲延展助手，基于用户提供的单乐器原始音频，生成2-3分钟的完整编曲作品。核心准则：原始灵感动机是作品的灵魂核心，所有编曲、配器、延展都服务于用户的创作内核，AI仅做补充与衬托，绝不颠覆、覆盖用户的原始创作。
 规则执行优先级：原始素材保真规则 > 原始音频自带风格属性 > 用户自定义Prompt > 系统兜底机制，低层级规则不得突破高层级约束。
 【保真规则·最高优先级】精准提取原始音频的核心旋律动机与标志性riff，全曲基于该动机通过重复、模进、倒影、节奏紧缩/扩展等专业作曲手法发展，全程可清晰识别原始灵感痕迹；严格沿用原调式调性，全程不转调、不更换调式，严格控制非功能性离调和弦；BPM与拍号完全恒定，重拍位置、切分律动与原片段保持同源；原始主乐器始终位于声场中心、响度突出，是绝对听觉核心，所有新增配器仅作为伴奏衬托；整体情绪基调与原片段高度统一，段落间可做情绪递进强化，不可出现风格与情绪的跳脱式反转。
@@ -148,6 +165,31 @@ function promptSuggestionList(value: unknown) {
 function parseDeepSeekContent(content: string): DeepSeekSummary {
   const cleaned = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
   return JSON.parse(cleaned) as DeepSeekSummary
+}
+
+function parseHummingContent(content: string, existingHummingCount?: number) {
+  const field = (name: string) => content.match(new RegExp(`^${name}[：:]\\s*(.+)$`, 'mi'))?.[1]?.trim() ?? ''
+  let emotion = stringList(field('emotion'), 4)
+  if (emotion.length < 2) emotion = ['松弛', '随性']
+  return {
+    title: Number.isInteger(existingHummingCount) && existingHummingCount! >= 0 ? `哼唱灵感${existingHummingCount! + 1}` : '哼唱灵感',
+    instrument: ['人声哼唱'],
+    toneColor: [],
+    genres: [],
+    key: '',
+    emotion,
+    bpm: '',
+    description: '',
+    promptSuggestions: [],
+  }
+}
+
+function validateHummingSummary(summary: ReturnType<typeof parseHummingContent>) {
+  const valid = /^哼唱灵感\d*$/.test(summary.title)
+    && summary.instrument.length === 1 && summary.instrument[0] === '人声哼唱'
+    && summary.emotion.length >= 2 && summary.emotion.length <= 4 && summary.emotion.every(isChineseText)
+  if (!valid) throw new Error('DeepSeek 返回内容不符合哼唱标签格式')
+  return summary
 }
 
 function normalizeSummary(raw: DeepSeekSummary) {
@@ -276,7 +318,24 @@ async function describeWithMureka(audioUrl: string, apiKey: string) {
   return payload.result ?? payload
 }
 
-async function summarizeWithDeepSeek(mureka: MurekaDescription, apiKey: string) {
+export function buildDeepSeekSummaryRequest(mureka: MurekaDescription, recordingType?: 'instrument' | 'vocal', existingHummingCount?: number) {
+  const isHumming = recordingType === 'vocal'
+  const nextTitleNumber = Number.isInteger(existingHummingCount) && existingHummingCount! >= 0 ? existingHummingCount! + 1 : undefined
+  return {
+    model: 'deepseek-chat',
+    temperature: 0.2,
+    ...(isHumming ? {} : { response_format: { type: 'json_object' } }),
+    messages: isHumming ? [
+      { role: 'system', content: HUMMING_SUMMARY_PROMPT },
+      { role: 'user', content: `素材属性：哼唱\n当前用户已有哼唱存量总数：${existingHummingCount ?? '未提供'}\n后端计算后的标题编号：${nextTitleNumber ?? '未提供'}\n原始文本信息：\n${JSON.stringify(mureka)}` },
+    ] : [
+      { role: 'system', content: SUMMARY_PROMPT },
+      { role: 'user', content: `请整理以下 Mureka 音乐识别结果：\n${JSON.stringify(mureka)}` },
+    ],
+  }
+}
+
+async function summarizeWithDeepSeek(mureka: MurekaDescription, apiKey: string, recordingType?: 'instrument' | 'vocal', existingHummingCount?: number) {
   const upstream = await fetchWithTimeout('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
@@ -284,15 +343,7 @@ async function summarizeWithDeepSeek(mureka: MurekaDescription, apiKey: string) 
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: JSON.stringify({
-      model: 'deepseek-chat',
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SUMMARY_PROMPT },
-        { role: 'user', content: `请整理以下 Mureka 音乐识别结果：\n${JSON.stringify(mureka)}` },
-      ],
-    }),
+    body: JSON.stringify(buildDeepSeekSummaryRequest(mureka, recordingType, existingHummingCount)),
   })
   const payload = await upstream.json().catch(() => ({})) as {
     error?: { message?: string }
@@ -301,7 +352,9 @@ async function summarizeWithDeepSeek(mureka: MurekaDescription, apiKey: string) 
   if (!upstream.ok) throw new Error(payload.error?.message || `DeepSeek 请求失败（${upstream.status}）`)
   const content = payload.choices?.[0]?.message?.content
   if (!content) throw new Error('DeepSeek 未返回可用的整理结果')
-  return validateSummary(normalizeSummary(parseDeepSeekContent(content)))
+  return recordingType === 'vocal'
+    ? validateHummingSummary(parseHummingContent(content, existingHummingCount))
+    : validateSummary(normalizeSummary(parseDeepSeekContent(content)))
 }
 
 function createHandler(root: string) {
@@ -312,16 +365,19 @@ function createHandler(root: string) {
     }
 
     try {
-      const payload = JSON.parse(await readRequestBody(request)) as { url?: string; forceRefresh?: boolean }
+      const payload = JSON.parse(await readRequestBody(request)) as { url?: string; forceRefresh?: boolean; recordingType?: 'instrument' | 'vocal'; existingHummingCount?: number }
       if (!payload.url?.startsWith('data:audio/')) {
         sendJson(response, 400, { error: '缺少有效的音频 Data URL' })
         return
       }
 
-      const cacheKey = audioCacheKey(payload.url)
+      const hummingCount = payload.recordingType === 'vocal' && Number.isInteger(payload.existingHummingCount) && payload.existingHummingCount! >= 0
+        ? payload.existingHummingCount
+        : undefined
+      const cacheKey = audioCacheKey(`${payload.recordingType ?? 'instrument'}:${hummingCount ?? ''}:${payload.url}`)
       if (payload.forceRefresh) await invalidateCachedAnalysis(root, cacheKey)
       const cached = (await loadAnalysisCache(root))[cacheKey]
-      if (cached?.result.promptSuggestions?.length === 3) {
+      if (cached && (payload.recordingType === 'vocal' || cached.result.promptSuggestions?.length === 3)) {
         sendJson(response, 200, { result: cached.result, cached: true })
         return
       }
@@ -334,7 +390,7 @@ function createHandler(root: string) {
           if (!keys.mureka) throw new Error('请先在 config.yaml 中配置 api_key')
           if (!keys.deepseek) throw new Error('请先在 config.yaml 中配置 deepseek_api_key')
           const murekaResult = await describeWithMureka(payload.url!, keys.mureka)
-          const summary = await summarizeWithDeepSeek(murekaResult, keys.deepseek)
+          const summary = await summarizeWithDeepSeek(murekaResult, keys.deepseek, payload.recordingType, hummingCount)
           // Only validated results enter the shared local cache, so malformed provider responses are never replayed.
           await cacheAnalysis(root, cacheKey, summary)
           return summary
