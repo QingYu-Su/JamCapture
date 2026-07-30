@@ -1,10 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InspirationTrack } from '../types'
 import { GenerationModal } from './GenerationModal'
 
+const generationMocks = vi.hoisted(() => ({ generateDemo: vi.fn() }))
+
 vi.mock('../context/LibraryContext', () => ({
-  useLibrary: () => ({ generateDemo: vi.fn() }),
+  useLibrary: () => ({ generateDemo: generationMocks.generateDemo }),
 }))
 
 vi.mock('../services/murekaLyricsClient', () => ({
@@ -17,6 +19,7 @@ vi.mock('react-router-dom', async () => {
 })
 
 afterEach(cleanup)
+beforeEach(() => { generationMocks.generateDemo.mockReset() })
 
 const track: InspirationTrack = {
   id: 'prompt-track', kind: 'inspiration', title: '暮色缓缓沉落',
@@ -34,6 +37,20 @@ const track: InspirationTrack = {
 }
 
 describe('GenerationModal', () => {
+  it('can close while generation continues and points users to the extensions page', async () => {
+    let finishGeneration: (() => void) | undefined
+    generationMocks.generateDemo.mockImplementation(() => new Promise<void>((resolve) => { finishGeneration = resolve }))
+    const onClose = vi.fn()
+    render(<GenerationModal open tracks={[track]} onClose={onClose} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '生成 Demo' }))
+    expect(await screen.findByText('生成进度请在灵感延伸页面查看')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
+    expect(onClose).toHaveBeenCalledOnce()
+    finishGeneration?.()
+    await Promise.resolve()
+  })
+
   it('shows generation modes and enables lyric expansion only after lyrics are entered', async () => {
     render(<GenerationModal open tracks={[track]} onClose={vi.fn()} />)
     expect(screen.getByText('当前所选歌曲')).toBeInTheDocument()

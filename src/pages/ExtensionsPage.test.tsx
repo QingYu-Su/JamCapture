@@ -10,8 +10,16 @@ const generatedTrack: GeneratedTrack = {
   style: '摇滚', status: 'complete', createdAt: '2026-07-30T00:00:00.000Z', duration: 82,
 }
 
+const pendingTrack: GeneratedTrack = {
+  ...generatedTrack,
+  id: 'pending-card-test',
+  title: '雨夜片段 · 延伸作品',
+  status: 'generating',
+  duration: 0,
+}
+
 vi.mock('../context/LibraryContext', () => ({
-  useLibrary: () => ({ generated: [generatedTrack], inspirations: [], loading: false, getBlob: vi.fn() }),
+  useLibrary: () => ({ generated: [pendingTrack, generatedTrack], inspirations: [], loading: false, getBlob: vi.fn() }),
 }))
 
 vi.mock('../context/PlayerContext', () => ({
@@ -25,6 +33,13 @@ vi.mock('../components/ShareTrackModal', () => ({
 afterEach(cleanup)
 
 describe('ExtensionsPage sharing', () => {
+  it('shows a non-playable loading item while a background generation is running', () => {
+    render(<ExtensionsPage />)
+    expect(screen.getByText('雨夜片段 · 延伸作品')).toBeInTheDocument()
+    expect(screen.getByText('GENERATING')).toBeInTheDocument()
+    expect(screen.getByLabelText('作品生成中')).toBeInTheDocument()
+  })
+
   it('places a share action beside the generated-work playback action', () => {
     render(<ExtensionsPage />)
     const playButton = screen.getByRole('button', { name: '播放作品' })

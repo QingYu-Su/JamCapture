@@ -209,46 +209,67 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const generateDemo = useCallback(async (request: GenerationRequest) => {
     const source = inspirations.find((item) => item.id === request.sourceTrackIds[0])
     if (!source) throw new Error('找不到需要延伸的灵感歌曲')
-    const sourceBlob = await getTrackBlob(source)
-    if (!sourceBlob) throw new Error('找不到需要延伸的音频文件')
-
-    const prepared = await prepareReferenceAudioBlob(sourceBlob)
-    const result = await generateSongFromReference(prepared.audio, {
-      userPrompt: request.prompt,
-      lyrics: request.lyrics,
-      sourceTitle: source.title,
-      originalDuration: prepared.originalDuration,
-      preparedDuration: prepared.preparedDuration,
-      repeatCount: prepared.repeatCount,
-      generationKind: request.generationKind,
-    })
-    const audioAnalysis = await analyzeAudioBlob(result.audio)
-    // The local ID owns the IndexedDB record; provider task IDs are retained only for diagnostics.
     const trackId = crypto.randomUUID()
     const blobId = `generated-audio-${trackId}`
-    const track: GeneratedTrack = {
+    const createdAt = new Date().toISOString()
+    const pendingTrack: GeneratedTrack = {
       id: trackId,
       kind: 'generated',
-      title: result.title?.trim() || `${source.title} · 延伸作品`,
-      providerTaskId: result.taskId,
-      audioFingerprint: result.audioFingerprint,
-      audioSource: { type: 'blob', blobId },
-      waveform: audioAnalysis.waveform,
+      title: `${source.title} · 延伸作品`,
+      audioSource: source.audioSource,
+      waveform: source.waveform,
       sourceTrackIds: request.sourceTrackIds,
       mode: 'full',
       generationKind: request.generationKind,
       prompt: request.prompt,
-      lyrics: result.lyrics || request.lyrics || undefined,
-      timedLyrics: result.timedLyrics,
-      lyricsRecognitionAttemptedAt: result.timedLyrics.length ? new Date().toISOString() : undefined,
+      lyrics: request.lyrics || undefined,
       style: request.style || source.tags.style || 'Alternative',
-      status: 'complete',
-      createdAt: new Date().toISOString(),
-      duration: audioAnalysis.duration || result.duration || 0,
+      status: 'generating',
+      createdAt,
+      duration: 0,
     }
-    await repository.saveGenerated(track, result.audio)
-    setGenerated((items) => [track, ...items])
-    return track
+    // Add the job immediately. The modal may close or unmount while this async work continues.
+    setGenerated((items) => [pendingTrack, ...items.filter((item) => item.id !== trackId)])
+
+    try {
+      const sourceBlob = await getTrackBlob(source)
+      if (!sourceBlob) throw new Error('找不到需要延伸的音频文件')
+
+      const prepared = await prepareReferenceAudioBlob(sourceBlob)
+      const result = await generateSongFromReference(prepared.audio, {
+        userPrompt: request.prompt,
+        lyrics: request.lyrics,
+        sourceTitle: source.title,
+        originalDuration: prepared.originalDuration,
+        preparedDuration: prepared.preparedDuration,
+        repeatCount: prepared.repeatCount,
+        generationKind: request.generationKind,
+      })
+      const audioAnalysis = await analyzeAudioBlob(result.audio)
+      // The local ID owns the IndexedDB record; provider task IDs are retained only for diagnostics.
+      const track: GeneratedTrack = {
+        ...pendingTrack,
+        title: result.title?.trim() || pendingTrack.title,
+        providerTaskId: result.taskId,
+        audioFingerprint: result.audioFingerprint,
+        audioSource: { type: 'blob', blobId },
+        waveform: audioAnalysis.waveform,
+        lyrics: result.lyrics || request.lyrics || undefined,
+        timedLyrics: result.timedLyrics,
+        lyricsRecognitionAttemptedAt: result.timedLyrics.length ? new Date().toISOString() : undefined,
+        status: 'complete',
+        duration: audioAnalysis.duration || result.duration || 0,
+      }
+      await repository.saveGenerated(track, result.audio)
+      setGenerated((items) => items.map((item) => item.id === trackId ? track : item))
+      return track
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : '歌曲生成失败，请稍后重试'
+      setGenerated((items) => items.map((item) => item.id === trackId
+        ? { ...item, status: 'failed', generationError: message }
+        : item))
+      throw reason
+    }
   }, [inspirations])
 
   const ensureGeneratedLyrics = useCallback(async (track: GeneratedTrack) => {

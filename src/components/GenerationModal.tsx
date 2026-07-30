@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Disc3, LoaderCircle, Sparkles } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useLibrary } from '../context/LibraryContext'
@@ -22,9 +22,11 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
   const [generating, setGenerating] = useState(false)
   const [complete, setComplete] = useState(false)
   const [error, setError] = useState('')
+  const activeRun = useRef(0)
 
   useEffect(() => {
     if (open) {
+      activeRun.current += 1
       setPrompt('')
       setLyrics('')
       setLyricsExpanding(false)
@@ -38,6 +40,7 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
 
   async function submit() {
     if (!track) return
+    const run = ++activeRun.current
     setGenerating(true)
     setComplete(false)
     setError('')
@@ -51,15 +54,24 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
         lyrics: lyrics.trim(),
         style: track.tags.style,
       })
-      setProgress(100)
-      setComplete(true)
+      if (activeRun.current === run) {
+        setProgress(100)
+        setComplete(true)
+      }
     } catch (reason) {
-      setProgress(0)
-      setError(reason instanceof Error ? reason.message : '歌曲生成失败，请稍后重试')
+      if (activeRun.current === run) {
+        setProgress(0)
+        setError(reason instanceof Error ? reason.message : '歌曲生成失败，请稍后重试')
+      }
     } finally {
       window.clearInterval(interval)
-      setGenerating(false)
+      if (activeRun.current === run) setGenerating(false)
     }
+  }
+
+  function close() {
+    activeRun.current += 1
+    onClose()
   }
 
   async function handleExpandLyrics() {
@@ -76,7 +88,7 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
   }
 
   return (
-    <Modal open={open} onOpenChange={(next) => !next && !generating && onClose()} title="灵感延伸" description="基于当前灵感继续创作" size="lg">
+    <Modal open={open} onOpenChange={(next) => !next && close()} title="灵感延伸" description="基于当前灵感继续创作" size="lg">
       <section className="generation-settings generation-settings-single">
         {track && (
           <div className="selected-source">
@@ -116,11 +128,11 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
             )}
           </div>
         </div>}
-        {generating && <div className="generation-progress"><div><LoaderCircle className="spin" size={17} /><span>正在分析并构建 Demo</span><strong>{Math.round(progress)}%</strong></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></div>}
+        {generating && <div className="generation-progress"><div><LoaderCircle className="spin" size={17} /><span>正在分析并构建 Demo</span><strong>{Math.round(progress)}%</strong></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div><p>生成进度请在灵感延伸页面查看</p></div>}
         {error && <div className="generation-error" role="alert">{error}</div>}
         {complete && <div className="generation-complete"><Check size={18} /><span>Demo 已生成并保存到灵感延伸</span></div>}
         <div className="dialog-footer generation-footer">
-          {complete ? <button className="primary-button" onClick={() => { onClose(); navigate('/extensions') }}>查看生成作品</button> : <button className="primary-button wide" disabled={generating} onClick={() => void submit()}>{generating ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}生成 Demo</button>}
+          {complete ? <button className="primary-button" onClick={() => { close(); navigate('/extensions') }}>查看生成作品</button> : <button className="primary-button wide" disabled={generating} onClick={() => void submit()}>{generating ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}生成 Demo</button>}
         </div>
       </section>
     </Modal>

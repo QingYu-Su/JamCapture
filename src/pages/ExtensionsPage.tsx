@@ -1,4 +1,4 @@
-import { Disc3, Pause, Play, Share2, Sparkles, WandSparkles } from 'lucide-react'
+import { Disc3, LoaderCircle, Pause, Play, Share2, Sparkles, WandSparkles } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLibrary } from '../context/LibraryContext'
@@ -11,6 +11,23 @@ import { ShareTrackModal } from '../components/ShareTrackModal'
 function GeneratedCard({ track, sourceNames, onShare }: { track: GeneratedTrack; sourceNames: string[]; onShare: () => void }) {
   const { current, playing, play } = usePlayer()
   const active = current?.id === track.id && playing
+  if (track.status !== 'complete') {
+    const failed = track.status === 'failed'
+    return (
+      <article className={`generated-card generated-card-pending${failed ? ' generated-card-failed' : ''}`} aria-live="polite">
+        <div className="generated-number">AI / {track.id.slice(0, 4).toUpperCase()}</div>
+        <div className="generated-top">
+          <div className="generated-icon">{failed ? <Sparkles size={22} /> : <LoaderCircle className="spin" size={22} />}</div>
+          <div><h3>{track.title}</h3><p>基于 {sourceNames.join('、') || `${track.sourceTrackIds.length} 段灵感`}</p></div>
+          <span className={`complete-badge ${failed ? 'failed-badge' : 'generating-badge'}`}><i />{failed ? 'FAILED' : 'GENERATING'}</span>
+        </div>
+        {failed
+          ? <p className="generated-task-error">{track.generationError || '生成失败，请返回灵感库重新尝试'}</p>
+          : <div className="generated-task-progress" aria-label="作品生成中"><span /></div>}
+        <p className="generated-prompt">“{track.prompt}”</p>
+      </article>
+    )
+  }
   return (
     <article className="generated-card">
       <div className="generated-number">AI / {track.id.slice(0, 4).toUpperCase()}</div>

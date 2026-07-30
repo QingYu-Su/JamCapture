@@ -75,6 +75,7 @@ export interface GeneratedTrack {
   lyricsRecognitionAttemptedAt?: string
   style: string
   status: GenerationStatus
+  generationError?: string
   createdAt: string
   duration: number
 }
