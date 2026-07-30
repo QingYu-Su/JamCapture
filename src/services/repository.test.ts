@@ -38,6 +38,9 @@ describe('repository', () => {
     await repository.saveGenerated(track, new Blob(['generated-audio'], { type: 'audio/mpeg' }))
     expect((await repository.getGenerated()).some((item) => item.id === track.id)).toBe(true)
     expect(await repository.getAudioBlob('generated-storage-audio')).toBeDefined()
+    await repository.deleteGenerated(track)
+    expect((await repository.getGenerated()).some((item) => item.id === track.id)).toBe(false)
+    expect(await repository.getAudioBlob('generated-storage-audio')).toBeUndefined()
   })
 
   it('identifies the obsolete fixed simulation audio records', () => {

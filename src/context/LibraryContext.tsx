@@ -54,6 +54,7 @@ interface LibraryContextValue {
   saveInspiration: (track: InspirationTrack, blob?: Blob) => Promise<void>
   updateInspiration: (track: InspirationTrack) => Promise<void>
   deleteInspiration: (track: InspirationTrack) => Promise<void>
+  deleteGenerated: (track: GeneratedTrack) => Promise<void>
   generateDemo: (request: GenerationRequest) => Promise<GeneratedTrack>
   ensureGeneratedLyrics: (track: GeneratedTrack) => Promise<GeneratedTrack>
   analyzeInspiration: (track: InspirationTrack, options?: { forceRefresh?: boolean }) => Promise<void>
@@ -129,6 +130,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const deleteInspiration = useCallback(async (track: InspirationTrack) => {
     await repository.deleteInspiration(track)
     setInspirations((items) => items.filter((item) => item.id !== track.id))
+  }, [])
+
+  const deleteGenerated = useCallback(async (track: GeneratedTrack) => {
+    await repository.deleteGenerated(track)
+    setGenerated((items) => items.filter((item) => item.id !== track.id))
   }, [])
 
   const analyzeInspiration = useCallback(async (track: InspirationTrack, options: { forceRefresh?: boolean } = {}) => {
@@ -299,8 +305,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({
     inspirations, generated, loading, saveInspiration, updateInspiration,
-    deleteInspiration, generateDemo, ensureGeneratedLyrics, analyzeInspiration, getBlob: repository.getAudioBlob,
-  }), [analyzeInspiration, deleteInspiration, ensureGeneratedLyrics, generateDemo, generated, inspirations, loading, saveInspiration, updateInspiration])
+    deleteInspiration, deleteGenerated, generateDemo, ensureGeneratedLyrics, analyzeInspiration, getBlob: repository.getAudioBlob,
+  }), [analyzeInspiration, deleteGenerated, deleteInspiration, ensureGeneratedLyrics, generateDemo, generated, inspirations, loading, saveInspiration, updateInspiration])
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>
 }

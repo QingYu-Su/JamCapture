@@ -101,6 +101,15 @@ export const repository = {
     await tx.done
   },
 
+  async deleteGenerated(track: GeneratedTrack) {
+    const db = await getDatabase()
+    const stores = track.audioSource.type === 'blob' ? ['generated', 'audioBlobs'] as const : ['generated'] as const
+    const tx = db.transaction(stores, 'readwrite')
+    await tx.objectStore('generated').delete(track.id)
+    if (track.audioSource.type === 'blob') await tx.objectStore('audioBlobs').delete(track.audioSource.blobId)
+    await tx.done
+  },
+
   async getAudioBlob(id: string) {
     return (await getDatabase()).get('audioBlobs', id)
   },

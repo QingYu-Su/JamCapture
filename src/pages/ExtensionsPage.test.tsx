@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GeneratedTrack } from '../types'
 import { ExtensionsPage } from './ExtensionsPage'
@@ -18,12 +18,14 @@ const pendingTrack: GeneratedTrack = {
   duration: 0,
 }
 
+const extensionMocks = vi.hoisted(() => ({ deleteGenerated: vi.fn(), stopIfTrack: vi.fn() }))
+
 vi.mock('../context/LibraryContext', () => ({
-  useLibrary: () => ({ generated: [pendingTrack, generatedTrack], inspirations: [], loading: false, getBlob: vi.fn() }),
+  useLibrary: () => ({ generated: [pendingTrack, generatedTrack], inspirations: [], loading: false, getBlob: vi.fn(), deleteGenerated: extensionMocks.deleteGenerated }),
 }))
 
 vi.mock('../context/PlayerContext', () => ({
-  usePlayer: () => ({ current: null, playing: false, play: vi.fn() }),
+  usePlayer: () => ({ current: null, playing: false, play: vi.fn(), stopIfTrack: extensionMocks.stopIfTrack }),
 }))
 
 vi.mock('../components/ShareTrackModal', () => ({
@@ -47,5 +49,16 @@ describe('ExtensionsPage sharing', () => {
     expect(playButton.parentElement).toBe(shareButton.parentElement)
     fireEvent.click(shareButton)
     expect(screen.getByText('正在分享 暮色延伸作品')).toBeInTheDocument()
+  })
+
+  it('deletes one generated item only after inline confirmation', async () => {
+    extensionMocks.deleteGenerated.mockResolvedValue(undefined)
+    render(<ExtensionsPage />)
+    fireEvent.click(screen.getByRole('button', { name: '删除 暮色延伸作品' }))
+    expect(extensionMocks.deleteGenerated).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '确认删除 暮色延伸作品' }))
+    await waitFor(() => expect(extensionMocks.deleteGenerated).toHaveBeenCalledWith(generatedTrack))
+    expect(extensionMocks.stopIfTrack).toHaveBeenCalledWith(generatedTrack.id)
+    expect(screen.queryByRole('button', { name: '删除 雨夜片段 · 延伸作品' })).not.toBeInTheDocument()
   })
 })

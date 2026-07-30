@@ -1,4 +1,4 @@
-import { Disc3, LoaderCircle, Pause, Play, Share2, Sparkles, WandSparkles } from 'lucide-react'
+import { Disc3, LoaderCircle, Pause, Play, Share2, Sparkles, Trash2, WandSparkles, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useLibrary } from '../context/LibraryContext'
@@ -8,7 +8,23 @@ import { formatDate, formatDuration } from '../utils/format'
 import { Waveform } from '../components/Waveform'
 import { ShareTrackModal } from '../components/ShareTrackModal'
 
-function GeneratedCard({ track, sourceNames, onShare }: { track: GeneratedTrack; sourceNames: string[]; onShare: () => void }) {
+function DeleteGeneratedAction({ track, onDelete }: { track: GeneratedTrack; onDelete: () => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  if (confirming) return (
+    <div className="generated-delete-confirm" role="group" aria-label={`确认删除 ${track.title}`}>
+      <span>确定删除？</span>
+      <button type="button" aria-label="取消删除" disabled={deleting} onClick={() => setConfirming(false)}><X size={14} /></button>
+      <button type="button" className="confirm" aria-label={`确认删除 ${track.title}`} disabled={deleting} onClick={async () => {
+        setDeleting(true)
+        try { await onDelete() } finally { setDeleting(false) }
+      }}>{deleting ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />}</button>
+    </div>
+  )
+  return <button type="button" className="generated-delete" onClick={() => setConfirming(true)} aria-label={`删除 ${track.title}`}><Trash2 size={16} /><span>删除</span></button>
+}
+
+function GeneratedCard({ track, sourceNames, onShare, onDelete }: { track: GeneratedTrack; sourceNames: string[]; onShare: () => void; onDelete: () => Promise<void> }) {
   const { current, playing, play } = usePlayer()
   const active = current?.id === track.id && playing
   if (track.status !== 'complete') {
@@ -25,6 +41,7 @@ function GeneratedCard({ track, sourceNames, onShare }: { track: GeneratedTrack;
           ? <p className="generated-task-error">{track.generationError || '生成失败，请返回灵感库重新尝试'}</p>
           : <div className="generated-task-progress" aria-label="作品生成中"><span /></div>}
         <p className="generated-prompt">“{track.prompt}”</p>
+        {failed && <div className="generated-pending-actions"><DeleteGeneratedAction track={track} onDelete={onDelete} /></div>}
       </article>
     )
   }
@@ -44,6 +61,7 @@ function GeneratedCard({ track, sourceNames, onShare }: { track: GeneratedTrack;
         <div className="generated-actions">
           <button className="generated-play" onClick={() => void play(track)}>{active ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}<span>{active ? '暂停' : '播放作品'}</span></button>
           <button className="generated-share" onClick={onShare} aria-label={`分享 ${track.title}`}><Share2 size={16} /><span>分享</span></button>
+          <DeleteGeneratedAction track={track} onDelete={onDelete} />
         </div>
       </div>
     </article>
@@ -51,7 +69,8 @@ function GeneratedCard({ track, sourceNames, onShare }: { track: GeneratedTrack;
 }
 
 export function ExtensionsPage() {
-  const { generated, inspirations, loading, getBlob } = useLibrary()
+  const { generated, inspirations, loading, getBlob, deleteGenerated } = useLibrary()
+  const { stopIfTrack } = usePlayer()
   const [sharingTrack, setSharingTrack] = useState<GeneratedTrack | null>(null)
   return (
     <div className="page extensions-page">
@@ -61,7 +80,7 @@ export function ExtensionsPage() {
       </header>
       <div className="section-heading"><div><h2>生成作品</h2><span>{generated.length} DEMOS</span></div></div>
       <section className="generated-list">
-        {loading ? <div className="loading-state"><span /><span /></div> : generated.length ? generated.map((track) => <GeneratedCard key={track.id} track={track} sourceNames={track.sourceTrackIds.map((id) => inspirations.find((item) => item.id === id)?.title).filter(Boolean) as string[]} onShare={() => setSharingTrack(track)} />) : <div className="empty-state extension-empty"><Sparkles size={30} /><h3>还没有延伸作品</h3><p>从灵感库选择一段或多段录音，创建第一首 Demo。</p><Link to="/library">返回灵感库</Link></div>}
+        {loading ? <div className="loading-state"><span /><span /></div> : generated.length ? generated.map((track) => <GeneratedCard key={track.id} track={track} sourceNames={track.sourceTrackIds.map((id) => inspirations.find((item) => item.id === id)?.title).filter(Boolean) as string[]} onShare={() => setSharingTrack(track)} onDelete={async () => { stopIfTrack(track.id); if (sharingTrack?.id === track.id) setSharingTrack(null); await deleteGenerated(track) }} />) : <div className="empty-state extension-empty"><Sparkles size={30} /><h3>还没有延伸作品</h3><p>从灵感库选择一段或多段录音，创建第一首 Demo。</p><Link to="/library">返回灵感库</Link></div>}
       </section>
       <ShareTrackModal track={sharingTrack} getBlob={getBlob} onClose={() => setSharingTrack(null)} />
     </div>
