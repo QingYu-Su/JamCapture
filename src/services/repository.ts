@@ -25,9 +25,25 @@ function getDatabase() {
   return database
 }
 
+export function isLegacySimulatedGeneration(track: GeneratedTrack) {
+  return track.audioSource.type === 'asset' && /^\/(?:2|3)\.mp3$/.test(track.audioSource.url)
+}
+
 export const repository = {
   async initialize() {
     const db = await getDatabase()
+
+    const cleanedLegacyGenerated = await db.get('settings', 'legacy-generated-cleaned-v1')
+    if (!cleanedLegacyGenerated?.value) {
+      const legacyTracks = (await db.getAll('generated')).filter(isLegacySimulatedGeneration)
+      const tx = db.transaction(['generated', 'settings'], 'readwrite')
+      await Promise.all([
+        ...legacyTracks.map((track) => tx.objectStore('generated').delete(track.id)),
+        tx.objectStore('settings').put({ key: 'legacy-generated-cleaned-v1', value: true }),
+      ])
+      await tx.done
+    }
+
     const seeded = await db.get('settings', 'demo-seeded')
     if (seeded?.value) return
 
@@ -76,8 +92,13 @@ export const repository = {
     )
   },
 
-  async saveGenerated(track: GeneratedTrack) {
-    await (await getDatabase()).put('generated', track)
+  async saveGenerated(track: GeneratedTrack, blob?: Blob) {
+    const db = await getDatabase()
+    const stores = blob ? ['generated', 'audioBlobs'] as const : ['generated'] as const
+    const tx = db.transaction(stores, 'readwrite')
+    await tx.objectStore('generated').put(track)
+    if (blob && track.audioSource.type === 'blob') await tx.objectStore('audioBlobs').put(blob, track.audioSource.blobId)
+    await tx.done
   },
 
   async getAudioBlob(id: string) {

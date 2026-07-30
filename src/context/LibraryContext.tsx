@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { fallbackWaveform } from '../data/demoTracks'
 import { repository } from '../services/repository'
 import type { GeneratedTrack, GenerationRequest, InspirationTrack } from '../types'
-import { AUDIO_WAVEFORM_VERSION, analyzeAudioBlob } from '../utils/audio'
+import { AUDIO_WAVEFORM_VERSION, analyzeAudioBlob, prepareReferenceAudioBlob } from '../utils/audio'
 import { AI_ANALYSIS_VERSION, completedAnalysis, describeAudio } from '../services/murekaClient'
+import { generateSongFromReference } from '../services/murekaGenerationClient'
 
 const waveformAnalysisJobs = new Map<string, Promise<InspirationTrack | null>>()
 const aiAnalysisJobs = new Map<string, Promise<InspirationTrack>>()
@@ -187,24 +187,38 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [analyzeInspiration, inspirations])
 
   const generateDemo = useCallback(async (request: GenerationRequest) => {
-    // The delay deliberately models an async cloud job while keeping the adapter replaceable.
-    await new Promise((resolve) => window.setTimeout(resolve, 2600))
     const source = inspirations.find((item) => item.id === request.sourceTrackIds[0])
+    if (!source) throw new Error('找不到需要延伸的灵感歌曲')
+    const sourceBlob = await getTrackBlob(source)
+    if (!sourceBlob) throw new Error('找不到需要延伸的音频文件')
+
+    const prepared = await prepareReferenceAudioBlob(sourceBlob)
+    const result = await generateSongFromReference(prepared.audio, request.prompt, source.title, {
+      originalDuration: prepared.originalDuration,
+      preparedDuration: prepared.preparedDuration,
+      repeatCount: prepared.repeatCount,
+    })
+    const audioAnalysis = await analyzeAudioBlob(result.audio)
+    // The local ID owns the IndexedDB record; provider task IDs are retained only for diagnostics.
+    const trackId = crypto.randomUUID()
+    const blobId = `generated-audio-${trackId}`
     const track: GeneratedTrack = {
-      id: crypto.randomUUID(),
+      id: trackId,
       kind: 'generated',
-      title: `${source?.title ?? 'Untitled'} — ${request.mode === 'full' ? 'Full Demo' : 'Instrument Study'}`,
-      audioSource: { type: 'asset', url: request.mode === 'full' ? '/3.mp3' : '/2.mp3' },
-      waveform: source?.waveform ?? fallbackWaveform,
+      title: result.title?.trim() || `${source.title} · 延伸作品`,
+      providerTaskId: result.taskId,
+      audioFingerprint: result.audioFingerprint,
+      audioSource: { type: 'blob', blobId },
+      waveform: audioAnalysis.waveform,
       sourceTrackIds: request.sourceTrackIds,
-      mode: request.mode,
+      mode: 'full',
       prompt: request.prompt,
-      style: request.style || source?.tags.style || 'Alternative',
+      style: request.style || source.tags.style || 'Alternative',
       status: 'complete',
       createdAt: new Date().toISOString(),
-      duration: request.mode === 'full' ? 98 : 64,
+      duration: audioAnalysis.duration || result.duration || 0,
     }
-    await repository.saveGenerated(track)
+    await repository.saveGenerated(track, result.audio)
     setGenerated((items) => [track, ...items])
     return track
   }, [inspirations])

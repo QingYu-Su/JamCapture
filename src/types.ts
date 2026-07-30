@@ -52,6 +52,8 @@ export interface GeneratedTrack {
   id: string
   kind: 'generated'
   title: string
+  providerTaskId?: string
+  audioFingerprint?: string
   audioSource: AudioSource
   waveform: number[]
   sourceTrackIds: string[]

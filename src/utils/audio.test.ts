@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encodePcmToMp3, waveformFromChannelData } from './audio'
+import { encodePcmToMp3, repeatChannelsToMinimumDuration, waveformFromChannelData } from './audio'
 
 describe('recording waveform analysis', () => {
   it('summarizes the whole recording and normalizes its loudest segment', () => {
@@ -31,5 +31,25 @@ describe('recording waveform analysis', () => {
     const mp3 = await encodePcmToMp3([samples], sampleRate, 128)
     expect(mp3.type).toBe('audio/mp3')
     expect(mp3.size).toBeGreaterThan(100)
+  })
+
+  it('loops only the temporary reference PCM until it reaches at least 30 seconds', () => {
+    const source = new Float32Array(10)
+    source[0] = 0.75
+    const prepared = repeatChannelsToMinimumDuration([source], 1, 30)
+    expect(prepared.repeatCount).toBe(3)
+    expect(prepared.preparedDuration).toBe(30)
+    expect(prepared.channels[0]).toHaveLength(30)
+    expect(prepared.channels[0][0]).toBe(0.75)
+    expect(prepared.channels[0][10]).toBe(0.75)
+    expect(source).toHaveLength(10)
+  })
+
+  it('preserves the full duration when the selected song already exceeds 30 seconds', () => {
+    const source = new Float32Array(42)
+    const prepared = repeatChannelsToMinimumDuration([source], 1, 30)
+    expect(prepared.repeatCount).toBe(1)
+    expect(prepared.preparedDuration).toBe(42)
+    expect(prepared.channels[0]).toHaveLength(42)
   })
 })

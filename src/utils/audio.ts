@@ -94,3 +94,50 @@ export async function convertAudioBlobToMp3(blob: Blob) {
     await context.close()
   }
 }
+
+export function repeatChannelsToMinimumDuration(
+  channels: Float32Array[],
+  sampleRate: number,
+  minimumDurationSeconds = 30,
+) {
+  const sourceLength = channels[0]?.length ?? 0
+  if (!sourceLength || sampleRate <= 0) throw new Error('参考音频没有可用的声音数据')
+  const sourceDuration = sourceLength / sampleRate
+  const repeatCount = sourceDuration < minimumDurationSeconds
+    ? Math.ceil(minimumDurationSeconds / sourceDuration)
+    : 1
+  const targetLength = sourceLength * repeatCount
+  const repeatedChannels = channels.map((source) => {
+    const output = new Float32Array(targetLength)
+    for (let offset = 0; offset < targetLength; offset += sourceLength) output.set(source, offset)
+    return output
+  })
+  return {
+    channels: repeatedChannels,
+    originalDuration: sourceDuration,
+    preparedDuration: targetLength / sampleRate,
+    repeatCount,
+  }
+}
+
+export async function prepareReferenceAudioBlob(blob: Blob, minimumDurationSeconds = 30) {
+  const context = new AudioContext()
+  try {
+    const buffer = await context.decodeAudioData(await blob.arrayBuffer())
+    const sourceChannels = Array.from(
+      { length: Math.min(2, buffer.numberOfChannels) },
+      (_, index) => buffer.getChannelData(index).slice(),
+    )
+    const prepared = repeatChannelsToMinimumDuration(sourceChannels, buffer.sampleRate, minimumDurationSeconds)
+    // The source Blob remains untouched. Only this temporary MP3 upload is looped when shorter than 30 seconds.
+    const audio = await encodePcmToMp3(prepared.channels, buffer.sampleRate)
+    return {
+      audio,
+      originalDuration: prepared.originalDuration,
+      preparedDuration: prepared.preparedDuration,
+      repeatCount: prepared.repeatCount,
+    }
+  } finally {
+    await context.close()
+  }
+}

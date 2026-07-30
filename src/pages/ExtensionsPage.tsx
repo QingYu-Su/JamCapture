@@ -40,7 +40,7 @@ export function ExtensionsPage() {
     <div className="page extensions-page">
       <header className="page-header extension-header">
         <div><span className="eyebrow">CREATIVE WORKSPACE / 02</span><h1>灵感延伸</h1><p>让一个片段，长成一首完整的作品。</p></div>
-        <div className="ai-status"><span><WandSparkles size={16} />AI ENGINE</span><strong>SIMULATION MODE</strong></div>
+        <div className="ai-status"><span><WandSparkles size={16} />AI ENGINE</span><strong>MUREKA CONNECTED</strong></div>
       </header>
       <div className="section-heading"><div><h2>生成作品</h2><span>{generated.length} DEMOS</span></div></div>
       <section className="generated-list">

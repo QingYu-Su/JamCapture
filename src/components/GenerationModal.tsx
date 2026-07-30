@@ -16,6 +16,7 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
   const [progress, setProgress] = useState(0)
   const [generating, setGenerating] = useState(false)
   const [complete, setComplete] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (open) {
@@ -23,6 +24,7 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
       setProgress(0)
       setGenerating(false)
       setComplete(false)
+      setError('')
     }
   }, [open, track?.id])
 
@@ -30,17 +32,24 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
     if (!track) return
     setGenerating(true)
     setComplete(false)
+    setError('')
     const interval = window.setInterval(() => setProgress((value) => Math.min(92, value + Math.random() * 14)), 260)
-    await generateDemo({
-      sourceTrackIds: [track.id],
-      mode: 'full',
-      prompt: prompt.trim() || promptSuggestions[0]?.text || '保留原始旋律动机，自然发展为完整作品。',
-      style: track.tags.style,
-    })
-    window.clearInterval(interval)
-    setProgress(100)
-    setGenerating(false)
-    setComplete(true)
+    try {
+      await generateDemo({
+        sourceTrackIds: [track.id],
+        mode: 'full',
+        prompt: prompt.trim() || promptSuggestions[0]?.text || '保留原始旋律动机，自然发展为完整作品。',
+        style: track.tags.style,
+      })
+      setProgress(100)
+      setComplete(true)
+    } catch (reason) {
+      setProgress(0)
+      setError(reason instanceof Error ? reason.message : '歌曲生成失败，请稍后重试')
+    } finally {
+      window.clearInterval(interval)
+      setGenerating(false)
+    }
   }
 
   return (
@@ -72,6 +81,7 @@ export function GenerationModal({ tracks, open, onClose }: GenerationModalProps)
           </div>
         </div>
         {generating && <div className="generation-progress"><div><LoaderCircle className="spin" size={17} /><span>正在分析并构建 Demo</span><strong>{Math.round(progress)}%</strong></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></div>}
+        {error && <div className="generation-error" role="alert">{error}</div>}
         {complete && <div className="generation-complete"><Check size={18} /><span>Demo 已生成并保存到灵感延伸</span></div>}
         <div className="dialog-footer generation-footer">
           {complete ? <button className="primary-button" onClick={() => { onClose(); navigate('/extensions') }}>查看生成作品</button> : <button className="primary-button wide" disabled={generating} onClick={() => void submit()}>{generating ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}生成 Demo</button>}
