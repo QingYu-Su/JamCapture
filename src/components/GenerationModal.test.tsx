@@ -1,10 +1,14 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { InspirationTrack } from '../types'
 import { GenerationModal } from './GenerationModal'
 
 vi.mock('../context/LibraryContext', () => ({
   useLibrary: () => ({ generateDemo: vi.fn() }),
+}))
+
+vi.mock('../services/murekaLyricsClient', () => ({
+  expandLyrics: vi.fn().mockResolvedValue('[主歌]\n扩写后的完整歌词'),
 }))
 
 vi.mock('react-router-dom', async () => {
@@ -30,7 +34,7 @@ const track: InspirationTrack = {
 }
 
 describe('GenerationModal', () => {
-  it('shows the selected song and its cached AI prompt suggestions without mode controls', () => {
+  it('shows generation modes and enables lyric expansion only after lyrics are entered', async () => {
     render(<GenerationModal open tracks={[track]} onClose={vi.fn()} />)
     expect(screen.getByText('当前所选歌曲')).toBeInTheDocument()
     expect(screen.getByText('暮色缓缓沉落')).toBeInTheDocument()
@@ -41,7 +45,17 @@ describe('GenerationModal', () => {
     expect(screen.queryByText('完整作品延伸')).not.toBeInTheDocument()
     expect(screen.queryByText('AI 推荐风格')).not.toBeInTheDocument()
 
+    expect(screen.getByRole('radio', { name: /纯音乐生成/ })).toBeChecked()
+    fireEvent.click(screen.getByRole('radio', { name: /完整词曲生成/ }))
+    const lyrics = screen.getByRole('textbox', { name: '歌词内容' })
+    const expand = screen.getByRole('button', { name: 'AI 扩写歌词' })
+    expect(expand).toBeDisabled()
+    fireEvent.change(lyrics, { target: { value: '雨夜里独自前行' } })
+    expect(expand).toBeEnabled()
+    fireEvent.click(expand)
+    await waitFor(() => expect(lyrics).toHaveValue('[主歌]\n扩写后的完整歌词'))
+
     fireEvent.click(screen.getByText('朦胧回响'))
-    expect(screen.getByRole('textbox')).toHaveValue(track.aiAnalysis?.promptSuggestions?.[1].text)
+    expect(screen.getByRole('textbox', { name: '创作意图' })).toHaveValue(track.aiAnalysis?.promptSuggestions?.[1].text)
   })
 })

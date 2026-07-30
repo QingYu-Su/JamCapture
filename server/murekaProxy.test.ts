@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildLyricsGenerationRequest, buildMurekaGenerationRequest } from './murekaProxy'
+import { buildLyricsGenerationRequest, buildMurekaGenerationRequest, timestampedLyricsFromRecognition } from './murekaProxy'
 
 describe('Mureka song generation request', () => {
   it('combines the fixed system prompt, modal prompt, fixed lyrics and uploaded song reference', () => {
@@ -33,5 +33,36 @@ describe('Mureka lyrics generation request', () => {
 
   it('rejects an empty lyrics prompt', () => {
     expect(() => buildLyricsGenerationRequest('   ')).toThrow('请先输入')
+  })
+
+  it('normalizes millisecond recognition segments into a sorted lyric timeline', () => {
+    expect(timestampedLyricsFromRecognition({
+      result: {
+        segments: [
+          { start_time: 6400, end_time: 9800, text: '第二句歌词' },
+          { start_time: 1200, end_time: 6200, text: '第一句歌词' },
+        ],
+      },
+    })).toEqual([
+      { startTime: 1.2, endTime: 6.2, text: '第一句歌词' },
+      { startTime: 6.4, endTime: 9.8, text: '第二句歌词' },
+    ])
+  })
+
+  it('parses the documented Mureka lyrics_sections line timestamps', () => {
+    expect(timestampedLyricsFromRecognition({
+      lyrics_sections: [{
+        section_type: 'verse',
+        start: 1000,
+        end: 12000,
+        lines: [
+          { start: 6400, end: 9800, text: '第二句歌词' },
+          { start: 1200, end: 6200, text: '第一句歌词' },
+        ],
+      }],
+    })).toEqual([
+      { startTime: 1.2, endTime: 6.2, text: '第一句歌词' },
+      { startTime: 6.4, endTime: 9.8, text: '第二句歌词' },
+    ])
   })
 })

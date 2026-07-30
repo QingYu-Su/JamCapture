@@ -1,6 +1,8 @@
 import { AudioLines, Library, Sparkles } from 'lucide-react'
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { PlayerBar } from './PlayerBar'
+import { FullscreenPlayer } from './FullscreenPlayer'
 import { cn } from '../utils/format'
 
 const navigation = [
@@ -22,6 +24,7 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const [playerOpen, setPlayerOpen] = useState(false)
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -29,7 +32,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Navigation />
       </aside>
       <main className="main-content">{children}</main>
-      <PlayerBar />
+      <PlayerBar onExpand={() => setPlayerOpen(true)} />
+      <FullscreenPlayer open={playerOpen} onClose={() => setPlayerOpen(false)} />
       <div className="mobile-nav"><Navigation mobile /></div>
     </div>
   )

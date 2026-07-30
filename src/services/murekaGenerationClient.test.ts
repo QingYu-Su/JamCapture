@@ -8,6 +8,7 @@ describe('Mureka generation client', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       taskId: 'task-123', title: '延伸作品', audioBase64: btoa('generated-mp3'),
       audioMimeType: 'audio/mpeg', audioFingerprint: 'sha256-generated', duration: 150,
+      timedLyrics: [{ startTime: 2.5, endTime: 6, text: '夜色缓缓落下' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -22,6 +23,7 @@ describe('Mureka generation client', () => {
     })
     expect(result.taskId).toBe('task-123')
     expect(result.audioFingerprint).toBe('sha256-generated')
+    expect(result.timedLyrics).toEqual([{ startTime: 2.5, endTime: 6, text: '夜色缓缓落下' }])
     const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/song/generate')
     const form = request.body as FormData

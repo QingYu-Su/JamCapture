@@ -218,6 +218,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       generationKind: request.generationKind,
       prompt: request.prompt,
       lyrics: request.lyrics || undefined,
+      timedLyrics: result.timedLyrics,
       style: request.style || source.tags.style || 'Alternative',
       status: 'complete',
       createdAt: new Date().toISOString(),

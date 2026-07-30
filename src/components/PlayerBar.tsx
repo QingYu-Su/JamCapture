@@ -4,7 +4,7 @@ import { Pause, Play, Volume1, Volume2, VolumeX, Waves } from 'lucide-react'
 import { usePlayer } from '../context/PlayerContext'
 import { formatDuration } from '../utils/format'
 
-export function PlayerBar() {
+export function PlayerBar({ onExpand }: { onExpand: () => void }) {
   const { current, playing, currentTime, duration, volume, toggle, seek, setVolume } = usePlayer()
   const timelineDuration = duration || current?.duration || 0
   const timelineValue = Math.min(currentTime, timelineDuration)
@@ -12,14 +12,21 @@ export function PlayerBar() {
   const VolumeIcon = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
 
   return (
-    <footer className="player-bar" aria-label="全局播放器">
-      <div className="player-track">
+    <footer
+      className="player-bar"
+      aria-label="全局播放器"
+      onClick={(event) => {
+        const target = event.target as HTMLElement
+        if (current && !target.closest('button, input, [role="slider"]')) onExpand()
+      }}
+    >
+      <button className="player-track player-track-button" type="button" onClick={onExpand} disabled={!current} aria-label={current ? `打开 ${current.title} 的全屏播放页` : '暂无播放歌曲'}>
         <div className="player-art"><Waves size={22} /></div>
         <div className="player-copy">
           <strong>{current?.title ?? '选择一段灵感开始播放'}</strong>
           <span>{current ? (current.kind === 'inspiration' ? current.tags.instrument : 'AI 延伸作品') : 'JamCapture Player'}</span>
         </div>
-      </div>
+      </button>
       <button className="player-play" onClick={toggle} disabled={!current} aria-label={playing ? '暂停' : '播放'}>
         {playing ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
       </button>

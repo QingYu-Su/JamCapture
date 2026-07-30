@@ -16,6 +16,12 @@ export interface AIPromptSuggestion {
   text: string
 }
 
+export interface TimedLyricLine {
+  startTime: number
+  endTime?: number
+  text: string
+}
+
 export interface AudioAIAnalysis {
   status: 'analyzing' | 'complete' | 'failed'
   title?: string
@@ -62,6 +68,7 @@ export interface GeneratedTrack {
   generationKind?: GenerationKind
   prompt: string
   lyrics?: string
+  timedLyrics?: TimedLyricLine[]
   style: string
   status: GenerationStatus
   createdAt: string

@@ -443,6 +443,133 @@ function generationResultAudio(result: Record<string, unknown>) {
   }
 }
 
+function clockTimeSeconds(value: string) {
+  const match = value.trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)$/)
+    ?? value.trim().match(/^(\d{1,2}):(\d{1,2}(?:\.\d+)?)$/)
+  if (!match) return undefined
+  if (match.length === 4) return Number(match[1] || 0) * 3600 + Number(match[2]) * 60 + Number(match[3])
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+export function timestampedLyricsFromRecognition(payload: Record<string, unknown>) {
+  const roots = [payload, payload.result, payload.data]
+    .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value)))
+  const arrayKeys = ['segments', 'lines', 'lyrics', 'sentences', 'utterances']
+  const stringKeys = ['lyrics', 'text', 'lrc']
+
+  for (const root of roots) {
+    // Mureka /v1/song/recognize returns millisecond timestamps under
+    // lyrics_sections[].lines[]. Handle that documented shape explicitly
+    // before falling back to the looser provider-compatible parsers below.
+    const sections = root.lyrics_sections
+    if (Array.isArray(sections)) {
+      const sectionLines = sections.flatMap((section) => {
+        if (!section || typeof section !== 'object' || Array.isArray(section)) return []
+        const lines = (section as Record<string, unknown>).lines
+        if (!Array.isArray(lines)) return []
+        return lines.flatMap((value) => {
+          if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+          const line = value as Record<string, unknown>
+          const text = stringValue(line.text).trim()
+          const start = Number(line.start)
+          const end = Number(line.end)
+          if (!text || !Number.isFinite(start) || start < 0) return []
+          return [{
+            text,
+            startTime: start / 1000,
+            endTime: Number.isFinite(end) && end >= start ? end / 1000 : undefined,
+          }]
+        })
+      }).sort((a, b) => a.startTime - b.startTime)
+      if (sectionLines.length) {
+        return sectionLines.map((line, index) => ({
+          ...line,
+          endTime: line.endTime ?? sectionLines[index + 1]?.startTime,
+        }))
+      }
+    }
+
+    for (const key of stringKeys) {
+      const raw = root[key]
+      if (typeof raw !== 'string' || !raw.includes('[')) continue
+      const lines = raw.split(/\r?\n/).flatMap((line) => {
+        const match = line.match(/^\[(\d{1,2}):(\d{1,2}(?:\.\d+)?)\]\s*(.+)$/)
+        if (!match) return []
+        return [{ startTime: Number(match[1]) * 60 + Number(match[2]), text: match[3].trim() }]
+      }).filter((line) => line.text)
+      if (lines.length) return lines.map((line, index) => ({ ...line, endTime: lines[index + 1]?.startTime }))
+    }
+
+    for (const key of arrayKeys) {
+      const values = root[key]
+      if (!Array.isArray(values)) continue
+      const parsed = values.flatMap((value) => {
+        if (!value || typeof value !== 'object') return []
+        const line = value as Record<string, unknown>
+        const text = ['text', 'lyrics', 'line', 'content', 'word'].map((name) => stringValue(line[name])).find(Boolean)
+        if (!text) return []
+        const startEntry = ['start_ms', 'start_time_ms', 'start', 'start_time', 'begin', 'offset']
+          .map((name) => ({ name, value: line[name] })).find((entry) => typeof entry.value === 'number' || typeof entry.value === 'string')
+        const endEntry = ['end_ms', 'end_time_ms', 'end', 'end_time', 'finish']
+          .map((name) => ({ name, value: line[name] })).find((entry) => typeof entry.value === 'number' || typeof entry.value === 'string')
+        if (!startEntry) return []
+        const startClock = typeof startEntry.value === 'string' ? clockTimeSeconds(startEntry.value) : undefined
+        const endClock = typeof endEntry?.value === 'string' ? clockTimeSeconds(endEntry.value) : undefined
+        const start = startClock ?? Number(startEntry.value)
+        const end = endClock ?? (endEntry ? Number(endEntry.value) : undefined)
+        if (!Number.isFinite(start)) return []
+        return [{
+          text,
+          start,
+          end: Number.isFinite(end) ? end : undefined,
+          startMilliseconds: startClock === undefined && /ms|offset/.test(startEntry.name),
+          endMilliseconds: endClock === undefined && Boolean(endEntry && /ms|offset/.test(endEntry.name)),
+          startWasClock: startClock !== undefined,
+          endWasClock: endClock !== undefined,
+        }]
+      })
+      if (!parsed.length) continue
+      const genericMaximum = Math.max(...parsed.filter((line) => !line.startMilliseconds && !line.startWasClock).map((line) => line.start), 0)
+      const genericValuesAreMilliseconds = genericMaximum > 600
+      const normalized = parsed.map((line) => ({
+        text: line.text,
+        startTime: line.start / (line.startMilliseconds || (!line.startWasClock && genericValuesAreMilliseconds) ? 1000 : 1),
+        endTime: line.end === undefined ? undefined : line.end / (line.endMilliseconds || (!line.endWasClock && genericValuesAreMilliseconds) ? 1000 : 1),
+      })).filter((line) => line.startTime >= 0).sort((a, b) => a.startTime - b.startTime)
+      return normalized.map((line, index) => ({
+        ...line,
+        endTime: line.endTime ?? normalized[index + 1]?.startTime,
+      }))
+    }
+  }
+  return []
+}
+
+async function recognizeGeneratedLyrics(
+  generatedAudioUrl: string,
+  generationBaseUrl: string,
+  authorization: Record<string, string>,
+) {
+  const recognitionUploadForm = new FormData()
+  recognitionUploadForm.append('purpose', 'audio')
+  recognitionUploadForm.append('url', generatedAudioUrl)
+  const uploadResponse = await fetchWithTimeout(`${generationBaseUrl}/v1/files/upload`, {
+    method: 'POST',
+    headers: authorization,
+    body: recognitionUploadForm,
+  })
+  const upload = await providerJson(uploadResponse, 'Mureka 生成歌曲识别上传')
+  const uploadAudioId = identifierValue(upload.id)
+  if (!uploadAudioId) throw new Error('生成歌曲重新上传成功，但没有返回 audio ID')
+  const recognitionResponse = await fetchWithTimeout(`${generationBaseUrl}/v1/song/recognize`, {
+    method: 'POST',
+    headers: { ...authorization, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ upload_audio_id: uploadAudioId }),
+  })
+  const recognition = await providerJson(recognitionResponse, 'Mureka 时间戳歌词识别')
+  return timestampedLyricsFromRecognition(recognition)
+}
+
 export function buildMurekaGenerationRequest(referenceId: string, userPrompt: string, lyrics = GENERATION_LYRICS) {
   const fallbackUserPrompt = '请在保真规则内自然延展为完整作品。'
   const combinedPrompt = `${GENERATION_SYSTEM_PROMPT}\n\n【用户自定义Prompt】\n${userPrompt.trim() || fallbackUserPrompt}`
@@ -547,6 +674,15 @@ function createGenerationHandler(root: string) {
 
       const generated = generationResultAudio(result)
       if (!generated.url) throw new Error('歌曲生成成功，但响应中没有音频 URL')
+      let timedLyrics: ReturnType<typeof timestampedLyricsFromRecognition> = []
+      if (metadata.lyrics.toLowerCase() !== GENERATION_LYRICS) {
+        try {
+          timedLyrics = await recognizeGeneratedLyrics(generated.url, keys.generationBaseUrl, authorization)
+        } catch (recognitionError) {
+          // The generated song remains valid even when the optional lyric alignment service fails.
+          console.warn('[JamCapture] Timestamped lyrics recognition failed', recognitionError)
+        }
+      }
       const audio = await downloadGeneratedAudio(generated.url, authorization)
       console.info('[JamCapture] Mureka generation audio resolved', {
         taskId,
@@ -561,6 +697,7 @@ function createGenerationHandler(root: string) {
         audioBase64: audio.audioBase64,
         audioMimeType: audio.audioMimeType,
         audioFingerprint: audio.audioFingerprint,
+        timedLyrics,
       })
     } catch (error) {
       return sendJson(response, 500, { error: error instanceof Error ? error.message : '歌曲生成请求失败' })

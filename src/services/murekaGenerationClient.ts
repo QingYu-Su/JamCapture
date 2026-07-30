@@ -4,6 +4,7 @@ interface GenerationPayload {
   audioBase64: string
   audioMimeType?: string
   audioFingerprint?: string
+  timedLyrics?: Array<{ startTime: number; endTime?: number; text: string }>
   duration?: number
 }
 
@@ -59,6 +60,7 @@ export async function generateSongFromReference(
     title: payload.title,
     duration: payload.duration,
     audioFingerprint: payload.audioFingerprint,
+    timedLyrics: payload.timedLyrics ?? [],
     audio: base64Audio(payload.audioBase64, payload.audioMimeType || 'audio/mpeg'),
   }
 }
