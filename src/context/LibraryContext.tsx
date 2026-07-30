@@ -193,7 +193,10 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (!sourceBlob) throw new Error('找不到需要延伸的音频文件')
 
     const prepared = await prepareReferenceAudioBlob(sourceBlob)
-    const result = await generateSongFromReference(prepared.audio, request.prompt, source.title, {
+    const result = await generateSongFromReference(prepared.audio, {
+      userPrompt: request.prompt,
+      lyrics: request.lyrics,
+      sourceTitle: source.title,
       originalDuration: prepared.originalDuration,
       preparedDuration: prepared.preparedDuration,
       repeatCount: prepared.repeatCount,
@@ -212,7 +215,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       waveform: audioAnalysis.waveform,
       sourceTrackIds: request.sourceTrackIds,
       mode: 'full',
+      generationKind: request.generationKind,
       prompt: request.prompt,
+      lyrics: request.lyrics || undefined,
       style: request.style || source.tags.style || 'Alternative',
       status: 'complete',
       createdAt: new Date().toISOString(),

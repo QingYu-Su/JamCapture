@@ -46,6 +46,7 @@ export interface InspirationTrack {
 }
 
 export type GenerationMode = 'instrument' | 'full'
+export type GenerationKind = 'instrumental' | 'full-song'
 export type GenerationStatus = 'generating' | 'complete' | 'failed'
 
 export interface GeneratedTrack {
@@ -58,7 +59,9 @@ export interface GeneratedTrack {
   waveform: number[]
   sourceTrackIds: string[]
   mode: GenerationMode
+  generationKind?: GenerationKind
   prompt: string
+  lyrics?: string
   style: string
   status: GenerationStatus
   createdAt: string
@@ -70,7 +73,9 @@ export type PlayableTrack = InspirationTrack | GeneratedTrack
 export interface GenerationRequest {
   sourceTrackIds: string[]
   mode: GenerationMode
+  generationKind: GenerationKind
   prompt: string
+  lyrics: string
   style: string
 }
 

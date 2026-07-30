@@ -22,7 +22,7 @@ function GeneratedCard({ track, sourceNames, onShare }: { track: GeneratedTrack;
       <Waveform data={track.waveform} active={active} progress={active ? 0.46 : 0} className="generated-wave" />
       <p className="generated-prompt">“{track.prompt}”</p>
       <div className="generated-footer">
-        <div className="generated-tags"><span>{track.mode === 'full' ? '完整作品' : '单乐器'}</span><span>{track.style}</span></div>
+        <div className="generated-tags"><span>{track.generationKind === 'full-song' ? '完整词曲' : '纯音乐'}</span><span>{track.style}</span></div>
         <div className="generated-meta">{formatDate(track.createdAt)} · {formatDuration(track.duration)}</div>
         <div className="generated-actions">
           <button className="generated-play" onClick={() => void play(track)}>{active ? <Pause size={17} fill="currentColor" /> : <Play size={17} fill="currentColor" />}<span>{active ? '暂停' : '播放作品'}</span></button>

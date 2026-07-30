@@ -364,16 +364,66 @@ async function providerJson(response: Response, label: string) {
   return payload
 }
 
-function generationMetadata(request: IncomingMessage) {
-  const encoded = request.headers['x-jamcapture-generation']
-  if (typeof encoded !== 'string') throw new Error('缺少歌曲生成参数')
-  const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Record<string, unknown>
+export function buildLyricsGenerationRequest(lyricsPrompt: string) {
+  const prompt = lyricsPrompt.trim()
+  if (!prompt) throw new Error('请先输入需要扩写的歌词内容')
+  if (prompt.length > 5000) throw new Error('歌词提示不能超过 5000 个字符')
+  return { prompt }
+}
+
+function createLyricsGenerationHandler(root: string) {
+  return async (request: IncomingMessage, response: ServerResponse) => {
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'Method not allowed' })
+    try {
+      const payload = JSON.parse(await readRequestBody(request)) as { prompt?: unknown }
+      const requestBody = buildLyricsGenerationRequest(stringValue(payload.prompt))
+      const keys = await readApiKeys(root)
+      if (!keys.generation) throw new Error('请先在 config.yaml 中配置 mureka_generation_api_key')
+      const upstream = await fetchWithTimeout(`${keys.generationBaseUrl}/v1/lyrics/generate`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${keys.generation}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      })
+      const generated = await providerJson(upstream, 'Mureka 歌词生成')
+      const nestedResult = generated.result && typeof generated.result === 'object'
+        ? generated.result as Record<string, unknown>
+        : {}
+      const lyrics = stringValue(generated.lyrics) || stringValue(nestedResult.lyrics)
+      if (!lyrics) throw new Error('歌词生成成功，但响应中没有 lyrics')
+      if (lyrics.length > 5000) throw new Error('生成的完整歌词超过 5000 个字符限制')
+      return sendJson(response, 200, { lyrics })
+    } catch (error) {
+      return sendJson(response, 500, { error: error instanceof Error ? error.message : '歌词扩写失败' })
+    }
+  }
+}
+
+async function generationForm(request: IncomingMessage) {
+  const contentType = String(request.headers['content-type'] || '')
+  if (!contentType.startsWith('multipart/form-data;')) throw new Error('歌曲生成请求必须使用 multipart/form-data')
+  const body = await readRequestBuffer(request, MAX_REQUEST_BYTES)
+  const form = await new Response(new Uint8Array(body), { headers: { 'Content-Type': contentType } }).formData()
+  const referenceAudio = form.get('referenceAudio')
+  const rawMetadata = form.get('metadata')
+  if (!(referenceAudio instanceof Blob) || typeof rawMetadata !== 'string') throw new Error('缺少参考歌曲或生成参数')
+  const parsed = JSON.parse(rawMetadata) as Record<string, unknown>
+  const lyrics = stringValue(parsed.lyrics) || GENERATION_LYRICS
+  if (lyrics.length > 5000) throw new Error('歌词不能超过 5000 个字符')
   return {
-    userPrompt: stringValue(parsed.userPrompt).slice(0, 500),
-    sourceTitle: stringValue(parsed.sourceTitle).slice(0, 120),
-    originalDuration: Number(parsed.originalDuration) || 0,
-    preparedDuration: Number(parsed.preparedDuration) || 0,
-    repeatCount: Math.max(1, Number(parsed.repeatCount) || 1),
+    referenceAudio: Buffer.from(await referenceAudio.arrayBuffer()),
+    referenceMimeType: referenceAudio.type || 'audio/mpeg',
+    metadata: {
+      userPrompt: stringValue(parsed.userPrompt).slice(0, 500),
+      lyrics,
+      sourceTitle: stringValue(parsed.sourceTitle).slice(0, 120),
+      originalDuration: Number(parsed.originalDuration) || 0,
+      preparedDuration: Number(parsed.preparedDuration) || 0,
+      repeatCount: Math.max(1, Number(parsed.repeatCount) || 1),
+    },
   }
 }
 
@@ -393,16 +443,18 @@ function generationResultAudio(result: Record<string, unknown>) {
   }
 }
 
-export function buildMurekaGenerationRequest(referenceId: string, userPrompt: string) {
+export function buildMurekaGenerationRequest(referenceId: string, userPrompt: string, lyrics = GENERATION_LYRICS) {
   const fallbackUserPrompt = '请在保真规则内自然延展为完整作品。'
   const combinedPrompt = `${GENERATION_SYSTEM_PROMPT}\n\n【用户自定义Prompt】\n${userPrompt.trim() || fallbackUserPrompt}`
   if (combinedPrompt.length > 2000) throw new Error('系统 Prompt 与用户 Prompt 拼接后超过 2000 字符限制')
+  const normalizedLyrics = lyrics.trim() || GENERATION_LYRICS
+  if (normalizedLyrics.length > 5000) throw new Error('歌词不能超过 5000 个字符')
   return {
     model: GENERATION_MODEL,
     n: 1,
     reference_id: referenceId,
     prompt: combinedPrompt,
-    lyrics: GENERATION_LYRICS,
+    lyrics: normalizedLyrics,
   }
 }
 
@@ -428,8 +480,8 @@ function createGenerationHandler(root: string) {
   return async (request: IncomingMessage, response: ServerResponse) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'Method not allowed' })
     try {
-      const metadata = generationMetadata(request)
-      const referenceAudio = await readRequestBuffer(request, MAX_REQUEST_BYTES)
+      const generation = await generationForm(request)
+      const { metadata, referenceAudio } = generation
       if (!referenceAudio.length) return sendJson(response, 400, { error: '缺少参考音频' })
       if (metadata.preparedDuration < 30) return sendJson(response, 400, { error: '上传给 Mureka 的临时参考音频必须不少于 30 秒' })
 
@@ -439,7 +491,7 @@ function createGenerationHandler(root: string) {
 
       const uploadForm = new FormData()
       uploadForm.append('purpose', 'reference')
-      uploadForm.append('file', new Blob([new Uint8Array(referenceAudio)], { type: 'audio/mpeg' }), 'jamcapture-reference.mp3')
+      uploadForm.append('file', new Blob([new Uint8Array(referenceAudio)], { type: generation.referenceMimeType }), 'jamcapture-reference.mp3')
       const uploadResponse = await fetchWithTimeout(`${keys.generationBaseUrl}/v1/files/upload`, {
         method: 'POST',
         headers: authorization,
@@ -449,7 +501,7 @@ function createGenerationHandler(root: string) {
       const referenceId = identifierValue(upload.id)
       if (!referenceId) throw new Error('参考音频上传成功，但没有返回 reference ID')
 
-      const generationRequest = buildMurekaGenerationRequest(referenceId, metadata.userPrompt)
+      const generationRequest = buildMurekaGenerationRequest(referenceId, metadata.userPrompt, metadata.lyrics)
       const generationEndpoint = `${keys.generationBaseUrl}/v1/song/easy-generate`
       console.info('[JamCapture] Mureka generation request prepared', {
         endpoint: generationEndpoint,
@@ -595,6 +647,7 @@ export function murekaProxy(): Plugin {
       next()
     })
     server.middlewares.use('/api/song/describe', createHandler(projectRoot))
+    server.middlewares.use('/api/lyrics/generate', createLyricsGenerationHandler(projectRoot))
     server.middlewares.use('/api/song/generate', createGenerationHandler(projectRoot))
     server.middlewares.use('/api/shares', createShareHandler(projectRoot))
   }

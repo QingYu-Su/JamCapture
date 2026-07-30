@@ -12,7 +12,10 @@ describe('Mureka generation client', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const reference = new Blob(['temporary-reference'], { type: 'audio/mp3' })
-    const result = await generateSongFromReference(reference, '加入克制鼓组', '暮色回声', {
+    const result = await generateSongFromReference(reference, {
+      userPrompt: '加入克制鼓组',
+      lyrics: '[主歌]\n夜色缓缓落下',
+      sourceTitle: '暮色回声',
       originalDuration: 10,
       preparedDuration: 30,
       repeatCount: 3,
@@ -21,17 +24,18 @@ describe('Mureka generation client', () => {
     expect(result.audioFingerprint).toBe('sha256-generated')
     const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/song/generate')
-    expect(request.body).toBe(reference)
-    const encoded = (request.headers as Record<string, string>)['X-JamCapture-Generation']
-    expect(JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'))).toEqual({
-      userPrompt: '加入克制鼓组', sourceTitle: '暮色回声',
+    const form = request.body as FormData
+    expect((form.get('referenceAudio') as Blob).size).toBe(reference.size)
+    expect(JSON.parse(String(form.get('metadata')))).toEqual({
+      userPrompt: '加入克制鼓组', lyrics: '[主歌]\n夜色缓缓落下', sourceTitle: '暮色回声',
       originalDuration: 10, preparedDuration: 30, repeatCount: 3,
     })
   })
 
   it('surfaces provider generation errors', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Invalid reference audio' }), { status: 400 })))
-    await expect(generateSongFromReference(new Blob(['audio']), '测试', '测试歌曲', {
+    await expect(generateSongFromReference(new Blob(['audio']), {
+      userPrompt: '测试', lyrics: '', sourceTitle: '测试歌曲',
       originalDuration: 30, preparedDuration: 30, repeatCount: 1,
     })).rejects.toThrow('Invalid reference audio')
   })

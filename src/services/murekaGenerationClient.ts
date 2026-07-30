@@ -7,17 +7,13 @@ interface GenerationPayload {
   duration?: number
 }
 
-interface ReferencePreparationMetadata {
+interface GenerationInput {
+  userPrompt: string
+  lyrics: string
+  sourceTitle: string
   originalDuration: number
   preparedDuration: number
   repeatCount: number
-}
-
-function encodeHeader(value: unknown) {
-  const bytes = new TextEncoder().encode(JSON.stringify(value))
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 }
 
 function base64Audio(value: string, mimeType: string) {
@@ -29,30 +25,31 @@ function base64Audio(value: string, mimeType: string) {
 
 export async function generateSongFromReference(
   referenceAudio: Blob,
-  userPrompt: string,
-  sourceTitle: string,
-  preparation: ReferencePreparationMetadata,
+  input: GenerationInput,
 ) {
+  const lyrics = input.lyrics.trim() || 'instrumental'
   console.info('[JamCapture] Browser generation request prepared', {
     endpoint: '/api/song/generate',
-    sourceTitle,
-    userPrompt,
+    sourceTitle: input.sourceTitle,
+    userPrompt: input.userPrompt,
+    lyrics: lyrics === 'instrumental' ? 'instrumental' : `[${lyrics.length} characters]`,
     referenceAudio: {
       type: referenceAudio.type || 'audio/mpeg',
       size: referenceAudio.size,
-      ...preparation,
+      originalDuration: input.originalDuration,
+      preparedDuration: input.preparedDuration,
+      repeatCount: input.repeatCount,
     },
   })
   // Browser DevTools pauses here before the selected song is sent to the local Mureka proxy.
   // eslint-disable-next-line no-debugger
   debugger
+  const form = new FormData()
+  form.append('referenceAudio', referenceAudio, 'jamcapture-reference.mp3')
+  form.append('metadata', JSON.stringify({ ...input, lyrics }))
   const response = await fetch('/api/song/generate', {
     method: 'POST',
-    headers: {
-      'Content-Type': referenceAudio.type || 'audio/mpeg',
-      'X-JamCapture-Generation': encodeHeader({ userPrompt, sourceTitle, ...preparation }),
-    },
-    body: referenceAudio,
+    body: form,
   })
   const payload = await response.json().catch(() => ({})) as Partial<GenerationPayload> & { error?: string }
   if (!response.ok) throw new Error(payload.error || `歌曲生成失败（${response.status}）`)

@@ -289,6 +289,22 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .selected-source strong { font-size: 12px; }
 .selected-source em { color: #806f6c; font-size: 9px; font-style: normal; }
 .field-caption { color: #8f8784; font-size: 10px; font-weight: 700; letter-spacing: .6px; }
+.generation-kind-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 9px; }
+.generation-kind-switch > button { min-height: 58px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid #302c2b; border-radius: 8px; background: #171414; color: #706966; cursor: pointer; transition: border-color .16s ease, background-color .16s ease, color .16s ease; }
+.generation-kind-switch > button:hover:not(:disabled) { border-color: #5e3333; background: #1e1717; }
+.generation-kind-switch > button.active { border-color: #84383c; background: #261719; color: #d45f64; box-shadow: inset 0 0 0 1px rgba(197,63,68,.1); }
+.generation-kind-switch > button:disabled { cursor: not-allowed; opacity: .58; }
+.generation-kind-switch span { display: grid; gap: 4px; }
+.generation-kind-switch strong { color: #d2cac7; font-size: 10px; }
+.generation-kind-switch small { color: #6f6764; font-size: 8px; font-weight: 500; line-height: 1.4; }
+.generation-lyrics-field > span { display: flex; justify-content: space-between; align-items: center; }
+.generation-lyrics-field > span small { color: #655e5b; font-size: 8px; font-weight: 500; letter-spacing: 0; }
+.generation-lyrics-input { position: relative; }
+.generation-lyrics-input textarea { min-height: 132px; padding-right: 50px; padding-bottom: 46px; }
+.lyrics-expand-button { position: absolute; right: 10px; bottom: 10px; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #6f3438; border-radius: 10px; background: #2a1719; color: #dd666b; cursor: pointer; box-shadow: 0 7px 18px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04); transition: border-color .16s ease, background-color .16s ease, color .16s ease, transform .16s ease; }
+.lyrics-expand-button:hover:not(:disabled) { border-color: #a94b50; background: #351b1e; color: #f17a7f; transform: translateY(-1px); }
+.lyrics-expand-button:disabled { border-color: #39302f; background: #211c1b; color: #514947; cursor: not-allowed; box-shadow: none; }
+.lyrics-expand-error { color: #bd686b; font-size: 9px; font-weight: 500; line-height: 1.5; letter-spacing: 0; }
 .prompt-suggestions { display: grid; gap: 7px; margin-top: 9px; }
 .prompt-suggestions > button { width: 100%; padding: 9px 10px; display: grid; grid-template-columns: 25px 1fr; gap: 9px; text-align: left; border: 1px solid #302c2b; border-radius: 7px; background: #191616; cursor: pointer; transition: border-color .16s ease, background-color .16s ease; }
 .prompt-suggestions > button:hover { border-color: #673333; background: #211818; }
