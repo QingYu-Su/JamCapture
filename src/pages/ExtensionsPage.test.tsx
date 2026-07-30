@@ -18,10 +18,10 @@ const pendingTrack: GeneratedTrack = {
   duration: 0,
 }
 
-const extensionMocks = vi.hoisted(() => ({ deleteGenerated: vi.fn(), stopIfTrack: vi.fn() }))
+const extensionMocks = vi.hoisted(() => ({ deleteGenerated: vi.fn(), updateGenerated: vi.fn(), stopIfTrack: vi.fn() }))
 
 vi.mock('../context/LibraryContext', () => ({
-  useLibrary: () => ({ generated: [pendingTrack, generatedTrack], inspirations: [], loading: false, getBlob: vi.fn(), deleteGenerated: extensionMocks.deleteGenerated }),
+  useLibrary: () => ({ generated: [pendingTrack, generatedTrack], inspirations: [], loading: false, getBlob: vi.fn(), deleteGenerated: extensionMocks.deleteGenerated, updateGenerated: extensionMocks.updateGenerated }),
 }))
 
 vi.mock('../context/PlayerContext', () => ({
@@ -51,12 +51,29 @@ describe('ExtensionsPage sharing', () => {
     expect(screen.getByText('正在分享 暮色延伸作品')).toBeInTheDocument()
   })
 
-  it('deletes one generated item only after inline confirmation', async () => {
+  it('opens an editor that saves title, description and tags', async () => {
+    extensionMocks.updateGenerated.mockResolvedValue(undefined)
+    render(<ExtensionsPage />)
+    fireEvent.click(screen.getByRole('button', { name: '编辑 暮色延伸作品' }))
+    fireEvent.change(screen.getByRole('textbox', { name: '作品标题' }), { target: { value: '新的作品标题' } })
+    fireEvent.change(screen.getByRole('textbox', { name: '作品描述' }), { target: { value: '新的作品描述' } })
+    fireEvent.change(screen.getByRole('textbox', { name: '作品标签' }), { target: { value: '流行，夜晚, 温暖' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }))
+    await waitFor(() => expect(extensionMocks.updateGenerated).toHaveBeenCalledWith(expect.objectContaining({
+      id: generatedTrack.id,
+      title: '新的作品标题',
+      description: '新的作品描述',
+      tags: ['流行', '夜晚', '温暖'],
+    })))
+  })
+
+  it('deletes one generated item only after confirmation inside the editor', async () => {
     extensionMocks.deleteGenerated.mockResolvedValue(undefined)
     render(<ExtensionsPage />)
-    fireEvent.click(screen.getByRole('button', { name: '删除 暮色延伸作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '编辑 暮色延伸作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '删除作品' }))
     expect(extensionMocks.deleteGenerated).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '确认删除 暮色延伸作品' }))
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
     await waitFor(() => expect(extensionMocks.deleteGenerated).toHaveBeenCalledWith(generatedTrack))
     expect(extensionMocks.stopIfTrack).toHaveBeenCalledWith(generatedTrack.id)
     expect(screen.queryByRole('button', { name: '删除 雨夜片段 · 延伸作品' })).not.toBeInTheDocument()

@@ -415,11 +415,13 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .generated-tags span { padding: 5px 8px; border-radius: 3px; background: #211314; border: 1px solid #482428; color: #b66d70; font-size: 8px; }
 .generated-meta { margin-left: auto; color: #625b58; font-size: 8px; }
 .generated-actions { display: flex; align-items: center; gap: 7px; }
-.generated-play, .generated-share, .generated-delete { height: 35px; padding: 0 13px; display: flex; align-items: center; gap: 6px; border-radius: 999px; font-size: 9px; font-weight: 720; cursor: pointer; }
+.generated-play, .generated-share, .generated-edit, .generated-delete { height: 35px; padding: 0 13px; display: flex; align-items: center; gap: 6px; border-radius: 999px; font-size: 9px; font-weight: 720; cursor: pointer; }
 .generated-play { border: 1px solid #6c282c; background: #351416; color: #efd8d8; }
 .generated-play:hover { border-color: #96363c; background: #46191c; }
 .generated-share { border: 1px solid #3d3735; background: #181515; color: #aaa19e; }
 .generated-share:hover { border-color: #5d5350; color: #fff; background: #211d1c; }
+.generated-edit { border: 1px solid #453b39; background: #1a1717; color: #b1a6a2; }
+.generated-edit:hover { border-color: #685754; background: #242020; color: #fff; }
 .generated-delete { border: 1px solid #492f31; background: #191415; color: #a77b7d; }
 .generated-delete:hover { border-color: #754044; background: #241719; color: #df969a; }
 .generated-delete-confirm { height: 35px; padding-left: 10px; display: flex; align-items: center; gap: 5px; border: 1px solid #573337; border-radius: 999px; background: #1f1516; }
@@ -427,6 +429,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .generated-delete-confirm button { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 50%; background: #2b2322; color: #9b918e; cursor: pointer; }
 .generated-delete-confirm button.confirm { margin-right: 4px; background: #722b30; color: #fff; }
 .generated-pending-actions { margin-top: 14px; display: flex; justify-content: flex-end; }
+.generated-edit-form textarea { min-height: 112px; resize: vertical; }
+.generated-edit-hint { margin: -9px 0 0; color: #655d5a; font-size: 8px; }
 .empty-state { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border: 1px dashed #322e2d; border-radius: 9px; color: #6d6562; }
 .empty-state h3 { margin: 14px 0 6px; color: #bbb2af; font-size: 14px; }
 .empty-state p { margin: 0 0 15px; font-size: 10px; }

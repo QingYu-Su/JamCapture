@@ -70,6 +70,8 @@ export interface GeneratedTrack {
   mode: GenerationMode
   generationKind?: GenerationKind
   prompt: string
+  description?: string
+  tags?: string[]
   lyrics?: string
   timedLyrics?: TimedLyricLine[]
   lyricsRecognitionAttemptedAt?: string

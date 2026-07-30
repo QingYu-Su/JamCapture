@@ -29,10 +29,10 @@ export async function createReadOnlyShare(track: PlayableTrack, getBlob: (id: st
     subtitle: inspiration ? '原始灵感录音' : 'AI 延伸作品',
     tags: inspiration
       ? [track.tags.style, track.tags.instrument, track.tags.mood, track.tags.bpm].filter(Boolean)
-      : [track.mode === 'full' ? '完整作品' : '单乐器延伸', track.style].filter(Boolean),
+      : track.tags ?? [track.mode === 'full' ? '完整作品' : '单乐器延伸', track.style].filter(Boolean),
     description: inspiration
       ? (track.aiAnalysis?.status === 'complete' ? track.aiAnalysis.description : undefined)
-      : track.prompt,
+      : track.description ?? track.prompt,
   })
   const response = await fetch('/api/shares', {
     method: 'POST',
